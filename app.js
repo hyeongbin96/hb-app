@@ -102,9 +102,15 @@ const filters = { q: '', label: '', priority: '' };
 
 let editing = null; // { columnId, cardId | null, draft }
 let dragged = null; // { columnId, cardId }
+let viewers = new Map(); // 관리자 전용: cardId → 그 카드를 보고 있는 닉네임들
 
 function findColumn(id) {
   return state.columns.find((c) => c.id === id);
+}
+
+// 이름에 "완료/done"이 들어간 컬럼, 없으면 마지막 컬럼을 완료 컬럼으로 본다
+function doneColumn() {
+  return state.columns.find((c) => /완료|done/i.test(c.title)) || state.columns[state.columns.length - 1];
 }
 
 // 다른 사람이 카드를 옮겼을 수 있으니 항상 id로 전체 컬럼에서 찾는다
@@ -162,11 +168,21 @@ function render() {
   boardEl.replaceChildren(...state.columns.map(renderColumn));
   $('clear-filters').hidden = !isFiltering();
   renderSummary();
+  renderMood();
+}
+
+// 완료 컬럼의 카드는 기한이 지나도 "지남"으로 세지 않는다
+function overdueCount() {
+  const done = doneColumn();
+  return state.columns
+    .filter((c) => c !== done)
+    .flatMap((c) => c.cards)
+    .filter((c) => dueStatus(c.due) === 'overdue').length;
 }
 
 function renderSummary() {
   const cards = state.columns.flatMap((c) => c.cards);
-  const overdue = cards.filter((c) => dueStatus(c.due) === 'overdue').length;
+  const overdue = overdueCount();
   const text = [`카드 ${cards.length}개`];
   if (overdue) text.push(`⏰ 기한 지남 ${overdue}개`);
   $('summary').textContent = text.join(' · ');
@@ -268,7 +284,8 @@ function renderCard(col, card) {
     meta.append(el('span', `badge prio-${card.priority}`, `${p.icon} ${p.name}`));
   }
   if (card.due) {
-    meta.append(el('span', `badge due ${dueStatus(card.due)}`, `📅 ${formatDue(card.due)}`));
+    const status = col === doneColumn() ? 'done' : dueStatus(card.due);
+    meta.append(el('span', `badge due ${status}`, `📅 ${formatDue(card.due)}`));
   }
   if (card.checklist.length) {
     const done = card.checklist.filter((i) => i.done).length;
@@ -279,6 +296,8 @@ function renderCard(col, card) {
   if (card.comments.length) {
     meta.append(el('span', 'badge comment', `💬 ${card.comments.length}`));
   }
+  const watching = viewers.get(card.id);
+  if (watching) meta.append(el('span', 'badge viewing', `👀 ${watching.join(', ')}`));
   if (meta.childElementCount) cardEl.append(meta);
 
   cardEl.addEventListener('dragstart', (e) => {
@@ -309,9 +328,11 @@ function beforeCardId(cardsEl, y) {
 
 function moveCard(from, toColumnId, beforeId) {
   if (from.cardId === beforeId) return;
+  const src = findColumn(from.columnId);
+  const dst = findColumn(toColumnId);
+  if (!src || !dst) return;
+  if (src !== dst && dst === doneColumn()) celebrate();
   update(() => {
-    const src = findColumn(from.columnId);
-    const dst = findColumn(toColumnId);
     const i = src.cards.findIndex((c) => c.id === from.cardId);
     if (i < 0) return;
     const [card] = src.cards.splice(i, 1);
@@ -362,6 +383,7 @@ function openDialog(columnId, cardId) {
   renderComments();
   dialog.showModal();
   titleInput.focus();
+  heartbeat();
 }
 
 function renderLabelPicker() {
@@ -494,6 +516,7 @@ $('nick-form').addEventListener('submit', (e) => {
   localStorage.setItem(NICK_STORAGE, nick);
   renderNickname();
   if (dialog.open) renderComments();
+  heartbeat();
 });
 
 $('nickname').addEventListener('click', openNickDialog);
@@ -659,6 +682,168 @@ $('import').addEventListener('change', async (e) => {
 
 $('add-column').addEventListener('click', addColumn);
 
+/* ---------- 캐릭터 리액션 ---------- */
+
+const CHEERS = [
+  { img: 'img/usagi.png', line: '야하!' },
+  { img: 'img/usagi.png', line: '우라~!' },
+  { img: 'img/chiikawa.png', line: '해냈다…!' },
+  { img: 'img/momonga.png', line: '나 칭찬해 줘!' },
+];
+const CONFETTI = ['🌸', '✨', '🍓', '⭐', '💖', '🎀'];
+
+const MOODS = {
+  party: '다 끝났다! 🎉',
+  worried: '마감 지난 게 있어…!',
+  sad: '마감이 잔뜩 지났어… 😢',
+};
+
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+// 카드를 완료 컬럼으로 옮기면 캐릭터가 튀어나와 축하한다
+function celebrate() {
+  document.querySelector('.celebrate')?.remove();
+  const cheer = pick(CHEERS);
+  const layer = el('div', 'celebrate');
+  const pop = el('div', 'cheer');
+  const img = el('img');
+  img.src = cheer.img;
+  img.alt = '';
+  pop.append(el('div', 'bubble', cheer.line), img);
+  layer.append(pop);
+
+  if (!reduceMotion.matches) {
+    for (let i = 0; i < 36; i++) {
+      const bit = el('span', 'confetti', pick(CONFETTI));
+      bit.style.setProperty('--x', `${(Math.random() - 0.5) * 700}px`);
+      bit.style.setProperty('--y', `${-180 - Math.random() * 380}px`);
+      bit.style.setProperty('--r', `${(Math.random() - 0.5) * 720}deg`);
+      bit.style.animationDelay = `${Math.random() * 0.15}s`;
+      layer.append(bit);
+    }
+  }
+
+  document.body.append(layer);
+  setTimeout(() => layer.remove(), 2200);
+}
+
+// 보드 상태에 따라 상단 캐릭터들의 기분이 바뀐다
+function renderMood() {
+  const overdue = overdueCount();
+  const done = doneColumn();
+  const cards = state.columns.flatMap((c) => c.cards);
+  const allDone = cards.length > 0 && done && done.cards.length === cards.length;
+
+  let mood = '';
+  if (overdue >= 3) mood = 'sad';
+  else if (overdue > 0) mood = 'worried';
+  else if (allDone) mood = 'party';
+
+  $('mascots').dataset.mood = mood;
+  const bubble = $('mood-bubble');
+  bubble.hidden = !mood;
+  bubble.textContent = MOODS[mood] || '';
+}
+
+/* ---------- 접속 신호 / 관리자 접속자 현황 ---------- */
+
+const SESSION_ID = sessionStorage.getItem('kanban-session') || uid();
+sessionStorage.setItem('kanban-session', SESSION_ID);
+
+const ADMIN_STORAGE = 'kanban-admin-key';
+const HEARTBEAT_MS = 15000;
+const ADMIN_POLL_MS = 10000;
+let adminTimer;
+
+// 모든 접속자가 보내는 "나 여기 있어요" 신호. 목록은 관리자만 볼 수 있다.
+async function heartbeat() {
+  const nickname = getNickname();
+  if (!nickname || document.hidden) return;
+  const cardId = (dialog.open && editing?.cardId) || null;
+  try {
+    await api('POST', JSON.stringify({ id: SESSION_ID, nickname, cardId }), '/api/presence');
+  } catch {
+    // 접속 신호는 실패해도 보드 사용에는 지장이 없다
+  }
+}
+
+const adminKey = () => localStorage.getItem(ADMIN_STORAGE) || '';
+
+async function pollPresence() {
+  try {
+    const res = await fetch('/api/presence', { headers: { 'x-admin-key': encodeURIComponent(adminKey()) } });
+    if (res.status === 401 || res.status === 403) {
+      const { error } = await res.json().catch(() => ({}));
+      stopAdmin();
+      showToast(error || '관리자 비밀번호가 틀렸어요');
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderPresence(await res.json());
+  } catch (e) {
+    console.warn('접속자 조회 실패', e);
+  }
+}
+
+function renderPresence(list) {
+  viewers = new Map();
+  list.forEach((p) => {
+    if (p.card_id && p.id !== SESSION_ID) viewers.set(p.card_id, [...(viewers.get(p.card_id) || []), p.nickname]);
+  });
+
+  $('presence-count').textContent = `${list.length}명`;
+  $('presence-list').replaceChildren(...list.map((p) => {
+    const li = el('li');
+    const avatar = el('span', 'avatar', [...p.nickname][0] || '?');
+    avatar.style.background = avatarColor(p.nickname);
+    const info = el('div', 'presence-info');
+    const found = findCardById(p.card_id);
+    info.append(
+      el('strong', '', p.id === SESSION_ID ? `${p.nickname} (나)` : p.nickname),
+      el('span', '', found ? `「${found.card.title}」 보는 중` : '보드 보는 중'),
+    );
+    li.append(avatar, info);
+    return li;
+  }));
+  if (!isBusy()) render();
+}
+
+function startAdmin() {
+  $('presence').hidden = false;
+  pollPresence();
+  clearInterval(adminTimer);
+  adminTimer = setInterval(pollPresence, ADMIN_POLL_MS);
+}
+
+function stopAdmin() {
+  localStorage.removeItem(ADMIN_STORAGE);
+  clearInterval(adminTimer);
+  $('presence').hidden = true;
+  viewers = new Map();
+  render();
+}
+
+$('admin-logout').addEventListener('click', () => {
+  stopAdmin();
+  showToast('관리자 모드를 껐어요');
+});
+$('presence-toggle').addEventListener('click', () => $('presence').classList.toggle('collapsed'));
+dialog.addEventListener('close', heartbeat);
+
+// 주소 끝에 ?admin 을 붙여 접속하면 관리자 비밀번호를 묻는다
+function initAdmin() {
+  const params = new URLSearchParams(location.search);
+  if (params.has('admin')) {
+    const key = prompt('관리자 비밀번호를 입력해 주세요');
+    if (key) localStorage.setItem(ADMIN_STORAGE, key);
+    params.delete('admin');
+    const query = params.toString();
+    history.replaceState(null, '', location.pathname + (query ? `?${query}` : '') + location.hash);
+  }
+  if (adminKey()) startAdmin();
+}
+
 /* ---------- 서버 동기화 ---------- */
 
 const KEY_STORAGE = 'kanban-key';
@@ -682,9 +867,9 @@ function setSync(status) {
   node.dataset.status = status;
 }
 
-async function api(method, body) {
+async function api(method, body, path = '/api/board') {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch('/api/board', {
+    const res = await fetch(path, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -805,6 +990,14 @@ render();
 renderNickname();
 if (!getNickname()) openNickDialog();
 setSync('loading');
-pull();
+pull().then(() => {
+  heartbeat();
+  initAdmin();
+});
 setInterval(pull, POLL_MS);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) pull(); });
+setInterval(heartbeat, HEARTBEAT_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  pull();
+  heartbeat();
+});

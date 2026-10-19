@@ -55,6 +55,117 @@ body {
 
 .top-actions { display: flex; gap: 8px; }
 
+/* ---------- 캐릭터 기분 ---------- */
+
+.mascots { position: relative; align-items: center; }
+.mood-bubble {
+  position: relative;
+  margin-left: 6px;
+  padding: 3px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: #fff;
+  border: 2px solid var(--pink-deep);
+  border-radius: 999px;
+  animation: pop .2s ease-out;
+}
+.mood-bubble::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-left: 2px solid var(--pink-deep);
+  border-bottom: 2px solid var(--pink-deep);
+  transform: translateY(-50%) rotate(45deg);
+}
+.mascots[data-mood="worried"] img { animation: shake .5s ease-in-out infinite; }
+.mascots[data-mood="worried"] img:nth-child(2) { animation-delay: .1s; }
+.mascots[data-mood="worried"] img:nth-child(3) { animation-delay: .2s; }
+.mascots[data-mood="sad"] img { animation: droop 2.4s ease-in-out infinite; filter: saturate(.4) brightness(.97); }
+.mascots[data-mood="party"] img { animation: dance .6s ease-in-out infinite alternate; }
+.mascots[data-mood="party"] img:nth-child(2) { animation-delay: .2s; }
+.mascots[data-mood="party"] img:nth-child(3) { animation-delay: .4s; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px) rotate(-3deg); } 75% { transform: translateX(2px) rotate(3deg); } }
+@keyframes droop { 0%, 100% { transform: translateY(2px) rotate(-4deg); } 50% { transform: translateY(4px) rotate(4deg); } }
+@keyframes dance { from { transform: translateY(0) rotate(-10deg); } to { transform: translateY(-8px) rotate(10deg); } }
+
+/* ---------- 완료 축하 ---------- */
+
+.celebrate { position: fixed; inset: 0; z-index: 50; pointer-events: none; overflow: hidden; }
+.cheer {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: cheer-up 2.2s ease-in-out forwards;
+}
+.cheer img { width: 180px; height: 180px; object-fit: contain; mix-blend-mode: multiply; }
+.cheer .bubble {
+  padding: 8px 20px;
+  font-size: 28px;
+  background: #fff;
+  border: 3px solid var(--pink-deep);
+  border-radius: 999px;
+  box-shadow: 0 4px 0 var(--pink-deep);
+  animation: wiggle .3s ease-in-out 3 .35s;
+}
+@keyframes cheer-up {
+  0% { transform: translate(-50%, 100%); }
+  18% { transform: translate(-50%, -12%); }
+  26%, 78% { transform: translate(-50%, 0); }
+  100% { transform: translate(-50%, 110%); }
+}
+@keyframes wiggle { 50% { transform: rotate(-6deg) scale(1.08); } }
+.confetti {
+  position: absolute;
+  left: 50%;
+  bottom: 30%;
+  font-size: 22px;
+  animation: burst 1.6s cubic-bezier(.2, .7, .4, 1) forwards;
+}
+@keyframes burst {
+  0% { transform: translate(-50%, 0) scale(.3); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--x)), var(--y)) rotate(var(--r)) scale(1); opacity: 0; }
+}
+
+/* ---------- 관리자 접속자 패널 ---------- */
+
+.presence {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 40;
+  width: 240px;
+  background: #fff;
+  border: 3px solid var(--blue-deep);
+  border-radius: 22px;
+  box-shadow: 0 5px 0 var(--blue-deep);
+  overflow: hidden;
+}
+.presence-head { display: flex; align-items: center; padding: 6px 8px 6px 4px; background: var(--blue); }
+.presence-title { flex: 1; text-align: left; border: none; background: transparent; }
+.presence-title:hover { transform: none; box-shadow: none; }
+#presence-count { margin-left: 4px; padding: 0 8px; background: #fff; border-radius: 999px; font-size: 12px; }
+.presence-list { list-style: none; margin: 0; padding: 8px; max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.presence-list:empty::after { content: "지금은 아무도 없어요"; font-size: 13px; color: var(--ink-soft); padding: 4px; }
+.presence-list li { display: flex; gap: 8px; align-items: center; }
+.presence-info { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.presence-info strong { font-weight: 400; }
+.presence-info span { color: var(--ink-soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.presence.collapsed .presence-list { display: none; }
+.badge.viewing { background: var(--blue); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mascots img, .cheer, .cheer .bubble { animation: none !important; }
+  .cheer { transform: translateX(-50%); }
+}
+
 /* ---------- 버튼 ---------- */
 
 button, .btn {
@@ -269,6 +380,7 @@ button.danger { color: var(--red); border-color: var(--pink-deep); background: #
 .badge.due.soon { background: #fff3cf; color: #a77a00; }
 .badge.due.today { background: #ffeedd; color: #c06a22; }
 .badge.due.overdue { background: var(--red); color: #fff; }
+.badge.due.done { text-decoration: line-through; opacity: .7; }
 .badge.check.complete { background: #e6f6e4; color: #4c8a47; }
 
 .add-card {

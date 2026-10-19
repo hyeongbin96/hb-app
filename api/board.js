@@ -1,13 +1,8 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { checkBoardKey, supabase } from './_lib.js';
 
 const TABLE = 'boards';
 const BOARD_ID = 'main';
 const MAX_BYTES = 1_000_000;
-
-function sameSecret(a, b) {
-  const hash = (s) => createHash('sha256').update(s).digest();
-  return timingSafeEqual(hash(a), hash(b));
-}
 
 async function fetchBoard(base, headers) {
   const res = await fetch(`${base}&select=data,version`, { headers });
@@ -19,27 +14,12 @@ async function fetchBoard(base, headers) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BOARD_PASSWORD } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 환경변수가 없습니다.' });
-  }
+  const db = supabase();
+  if (!db) return res.status(500).json({ error: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 환경변수가 없습니다.' });
+  if (!checkBoardKey(req)) return res.status(401).json({ error: '비밀번호가 필요합니다.' });
 
-  if (BOARD_PASSWORD) {
-    let key = '';
-    try {
-      key = decodeURIComponent(req.headers['x-board-key'] || '');
-    } catch {
-      key = '';
-    }
-    if (!sameSecret(key, BOARD_PASSWORD)) return res.status(401).json({ error: '비밀번호가 필요합니다.' });
-  }
-
-  const base = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${TABLE}?id=eq.${BOARD_ID}`;
-  const headers = {
-    apikey: SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    'Content-Type': 'application/json',
-  };
+  const base = `${db.rest}/${TABLE}?id=eq.${BOARD_ID}`;
+  const { headers } = db;
 
   try {
     if (req.method === 'GET') {

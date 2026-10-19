@@ -11,10 +11,11 @@
 <body>
   <header class="topbar">
     <h1>칸반 보드</h1>
-    <div class="mascots" aria-hidden="true">
+    <div id="mascots" class="mascots" aria-hidden="true">
       <img src="img/chiikawa.png" alt="">
       <img src="img/momonga.png" alt="">
       <img src="img/usagi.png" alt="">
+      <span id="mood-bubble" class="mood-bubble" hidden></span>
     </div>
     <div class="top-actions">
       <button id="nickname" type="button" class="nick" title="닉네임 바꾸기"></button>
@@ -118,6 +119,14 @@
       </div>
     </form>
   </dialog>
+
+  <aside id="presence" class="presence" hidden>
+    <div class="presence-head">
+      <button type="button" id="presence-toggle" class="presence-title">👑 접속자 <span id="presence-count"></span></button>
+      <button type="button" id="admin-logout" class="icon-btn" title="관리자 모드 끄기">✕</button>
+    </div>
+    <ul id="presence-list" class="presence-list"></ul>
+  </aside>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
