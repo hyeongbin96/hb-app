@@ -1,0 +1,11 @@
+{
+  "name": "hb-kanban",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

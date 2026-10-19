@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>칸반 보드</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>칸반 보드</h1>
+    <div class="mascots" aria-hidden="true">
+      <img src="img/chiikawa.png" alt="">
+      <img src="img/momonga.png" alt="">
+      <img src="img/usagi.png" alt="">
+    </div>
+    <div class="top-actions">
+      <button id="export" type="button" title="JSON 파일로 내보내기">⬇ 내보내기</button>
+      <label class="btn" title="JSON 파일 가져오기">⬆ 가져오기
+        <input id="import" type="file" accept="application/json,.json" hidden>
+      </label>
+      <button id="add-column" type="button" class="primary">+ 컬럼 추가</button>
+    </div>
+  </header>
+
+  <nav class="toolbar">
+    <div class="search">
+      <span aria-hidden="true">🔍</span>
+      <input id="search" type="search" placeholder="카드 검색  ( / )">
+    </div>
+    <select id="filter-label" aria-label="라벨 필터">
+      <option value="">모든 라벨</option>
+    </select>
+    <select id="filter-priority" aria-label="우선순위 필터">
+      <option value="">모든 우선순위</option>
+    </select>
+    <button id="clear-filters" type="button" hidden>필터 지우기</button>
+    <span id="summary" class="summary"></span>
+    <span id="sync" class="sync"></span>
+  </nav>
+
+  <main id="board" class="board"></main>
+
+  <dialog id="card-dialog">
+    <form method="dialog" id="card-form">
+      <h2 id="dialog-title">카드</h2>
+
+      <label class="field">제목
+        <input id="card-title" type="text" required maxlength="100">
+      </label>
+      <label class="field">설명
+        <textarea id="card-desc" rows="3" maxlength="1000"></textarea>
+      </label>
+
+      <div class="field-row">
+        <label class="field">우선순위
+          <select id="card-priority">
+            <option value="">없음</option>
+          </select>
+        </label>
+        <label class="field">마감일
+          <input id="card-due" type="date">
+        </label>
+      </div>
+
+      <div class="field">라벨
+        <div id="label-picker" class="label-picker"></div>
+      </div>
+
+      <div class="field">
+        <div class="check-head">
+          <span>체크리스트</span>
+          <span id="check-count" class="check-count"></span>
+        </div>
+        <div class="progress"><div id="check-progress"></div></div>
+        <ul id="checklist" class="checklist"></ul>
+        <div class="check-add">
+          <input id="check-input" type="text" maxlength="200" placeholder="항목 추가 후 Enter">
+          <button type="button" id="check-add">추가</button>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" id="card-delete" class="danger">삭제</button>
+        <span class="spacer"></span>
+        <button type="button" id="card-cancel">취소</button>
+        <button type="submit" class="primary">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
