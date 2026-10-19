@@ -168,8 +168,8 @@ body {
   right: 16px;
   bottom: 10px;
   z-index: 30;
-  width: 320px;
-  height: 140px;
+  width: 560px;
+  height: 210px;
   pointer-events: none;
 }
 .pet-yard::before { /* 잔디 */
@@ -178,14 +178,14 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 22px;
+  height: 28px;
   background: #d8f0c8;
   border: 3px solid #a9d98f;
   border-radius: 999px;
   box-shadow: 0 3px 0 #a9d98f;
 }
 
-.pet-house { position: absolute; right: 4px; bottom: 8px; width: 92px; }
+.pet-house { position: absolute; right: 12px; bottom: 10px; width: 140px; }
 .pet-house svg { display: block; width: 100%; }
 .pet-sign {
   position: absolute;
@@ -193,7 +193,7 @@ body {
   bottom: -2px;
   transform: translateX(-50%);
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
   background: #fff;
   border: 2px solid var(--line);
@@ -204,15 +204,15 @@ body {
   position: absolute;
   left: 0;
   bottom: 10px;
-  width: 80px;
+  width: 88px;
   transition-property: transform;
   transition-timing-function: linear;
 }
 .pet-body {
   position: relative;
   z-index: 1;
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   cursor: pointer;
   pointer-events: auto;
   transform-origin: 50% 100%;
@@ -428,9 +428,9 @@ body {
 
 .pet-zzz {
   position: absolute;
-  right: 14px;
-  top: -4px;
-  font-size: 16px;
+  right: 22px;
+  top: -6px;
+  font-size: 22px;
   opacity: 0;
 }
 .pet-house.sleeping { pointer-events: auto; cursor: pointer; }
@@ -459,7 +459,6 @@ body {
 
 /* ---------- 펫: 친구 ---------- */
 
-.friend-body { cursor: default; pointer-events: none; }
 .pet-bubble.say { cursor: default; }
 .pet-bubble.say:hover { transform: translateX(-50%); }
 
@@ -525,8 +524,8 @@ body {
 .snowman.grow { animation: pop .5s ease-out; }
 
 @media (max-width: 640px) {
-  .pet-yard { width: 230px; height: 120px; right: 8px; }
-  .pet-house { width: 72px; }
+  .pet-yard { width: calc(100vw - 16px); height: 170px; right: 8px; }
+  .pet-house { width: 100px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -25,11 +25,24 @@ function defaultState() {
       { id: uid(), title: '진행 중', wip: 0, cards: [] },
       { id: uid(), title: '완료', wip: 0, cards: [] },
     ],
-    pet: normalizePet(),
+    pets: normalizePets(),
   };
 }
 
-// 모두가 함께 키우는 치이카와. fedAt: 마지막으로 밥 먹은 시각
+// 놀이터에 사는 친구들. 모두가 함께 키운다
+const PET_IDS = ['chiikawa', 'usagi', 'momonga'];
+
+// legacy: 치이카와 한 마리만 키우던 예전 데이터(data.pet)
+function normalizePets(pets = {}, legacy = null) {
+  const out = {};
+  PET_IDS.forEach((id, i) => {
+    const src = pets[id] || (id === 'chiikawa' && legacy) || { fedAt: Date.now() - i * 40000 }; // 배고픈 때가 엇갈리게
+    out[id] = normalizePet(src);
+  });
+  return out;
+}
+
+// fedAt: 마지막으로 밥 먹은 시각
 function normalizePet(pet = {}) {
   return {
     fedAt: Number(pet.fedAt) || Date.now(),
@@ -70,7 +83,7 @@ function normalize(data) {
       wip: Number(col.wip) > 0 ? Math.floor(Number(col.wip)) : 0,
       cards: (Array.isArray(col.cards) ? col.cards : []).map(normalizeCard),
     })),
-    pet: normalizePet(data.pet),
+    pets: normalizePets(data.pets, data.pet),
   };
 }
 
@@ -856,297 +869,388 @@ function initAdmin() {
   if (adminKey()) startAdmin();
 }
 
-/* ---------- 펫: 치이카와 키우기 ---------- */
+/* ---------- 펫: 먼작귀 놀이터 (치이카와·우사기·모몽가) ---------- */
 
 const HUNGRY_AFTER_MS = 2 * 60 * 1000; // 밥 먹고 2분 지나면 배고파진다
-const PET_SIZE = 80;
-const HOUSE_SPACE = 96; // 오른쪽 집 자리
-
-const petEl = $('pet');
-const petBody = $('pet-body');
-const petBubble = $('pet-bubble');
-const yardEl = $('pet-yard');
-
-let petX = 20;
-let petTimer;
-let petBusy = false;      // 밥 먹는 중에는 돌아다니지 않는다
-let petFeedPending = false;
-let seenFedAt = state.pet.fedAt;
-
-const isHungry = () => Date.now() - state.pet.fedAt > HUNGRY_AFTER_MS;
-const petMaxX = () => Math.max(0, yardEl.clientWidth - HOUSE_SPACE - PET_SIZE);
-
-function petSchedule(ms, fn = petNextAction) {
-  clearTimeout(petTimer);
-  petTimer = setTimeout(fn, ms);
-}
-
-function setPetX(x, seconds = 0) {
-  petEl.style.transitionDuration = `${seconds}s`;
-  petEl.style.transform = `translateX(${x}px)`;
-  petX = x;
-}
-
+const SLEEP_EVERY_MS = 5 * 60 * 1000;  // 5분마다 낮잠
+const SLEEP_MS = 30 * 1000;            // 30초 동안 잔다
+const PET_SIZE = 88;
 const PET_MOTIONS = ['walking', 'running', 'hopping', 'look', 'hop', 'sigh', 'spin', 'dance', 'stretch'];
-const petRest = () => 120 + Math.random() * 300; // 동작 사이 아주 짧게만 쉰다
+const playGap = () => (40 + Math.random() * 50) * 1000; // 40~90초마다 둘이 만나서 논다
 
-// 하던 동작을 멈추고 지금 위치에 바로 선다
-function freezePet() {
-  clearTimeout(petTimer);
-  const { m41 } = new DOMMatrix(getComputedStyle(petEl).transform);
-  setPetX(m41);
-  petBody.classList.remove(...PET_MOTIONS);
-}
+const PET_TYPES = {
+  chiikawa: {
+    name: '치이카와',
+    img: 'img/chiikawa-pet.png',
+    speed: 1,
+    lines: { hungry: '🍙 배고파…', fed: '배불러~ 💕', sleepy: '졸려… 💤', wake: '잘 잤다~ ☀️', play: '와아!', snow: '눈사람 만들자! ⛄' },
+  },
+  usagi: {
+    name: '우사기',
+    img: 'img/usagi-pet.png',
+    speed: 1.4, // 우사기는 늘 신나서 빠르다
+    lines: { hungry: '🍙 하아…? 배고파', fed: '야하!! 💛', sleepy: '후아암…', wake: '우라~!', play: '야하!', snow: '우라~! ⛄' },
+  },
+  momonga: {
+    name: '모몽가',
+    img: 'img/momonga-pet.png',
+    speed: 1.15,
+    lines: { hungry: '🍙 밥 줘! 밥!', fed: '나 칭찬해 줘! 💙', sleepy: '졸려…', wake: '나 귀엽지?', play: '놀아 줘!', snow: '눈사람 내 거야! ⛄' },
+  },
+};
 
-// gait: walking(뒤뚱) / running(총총) / hopping(깡총깡총)
-function petMove(x, speed, gait) {
-  // 너무 가까운 곳이면 반대편으로 간다
-  if (Math.abs(x - petX) < 50) x = petMaxX() - x;
-  const seconds = Math.abs(x - petX) / speed;
-  petBody.classList.toggle('face-left', x < petX);
-  petBody.classList.add(gait);
-  setPetX(x, seconds);
-  petSchedule(seconds * 1000, () => {
-    petBody.classList.remove(gait);
-    petSchedule(petRest());
-  });
-}
-
-function petPlay(className, ms) {
-  petBody.classList.add(className);
-  petSchedule(ms, () => {
-    petBody.classList.remove(className);
-    petSchedule(petRest());
-  });
-}
-
-// 혼자 쉬지 않고 돌아다닌다. 배고프면 느릿느릿, 한숨이 늘어난다
-function petNextAction() {
-  if (petBusy || reduceMotion.matches) return;
-  const target = Math.random() * petMaxX();
-  const r = Math.random();
-  if (isHungry()) {
-    if (r < 0.6) petMove(target, 28, 'walking');
-    else if (r < 0.85) petPlay('sigh', 1600);
-    else petPlay('look', 1400);
-    return;
-  }
-  if (weather === 'snow' && r < 0.15) runPetEvent(buildSnowman);
-  else if (r < 0.38) petMove(target, 60, 'walking');
-  else if (r < 0.53) petMove(target, 140, 'running');
-  else if (r < 0.68) petMove(target, 75, 'hopping');
-  else if (r < 0.76) petPlay('spin', 900);
-  else if (r < 0.84) petPlay('dance', 1600);
-  else if (r < 0.92) petPlay('look', 1300);
-  else petPlay('stretch', 1300);
-}
-
-function showPetBubble(text, kind) {
-  petBubble.textContent = text;
-  petBubble.className = `pet-bubble ${kind}`;
-  petBubble.hidden = false;
-  petBubble.disabled = kind !== 'hungry';
-}
-
-function hidePetBubble() {
-  petBubble.hidden = true;
-}
-
-// 잠깐 한마디. 배고픔 말구름이 뜨는 동안에는 그쪽이 우선이다
-let sayUntil = 0;
-function petSay(text, ms = 2000) {
-  if (!petBusy && isHungry()) return;
-  showPetBubble(text, 'say');
-  sayUntil = Date.now() + ms;
-  setTimeout(() => {
-    if (Date.now() < sayUntil) return; // 그 사이 다른 말을 했다
-    hidePetBubble();
-    if (!petBusy) updatePet();
-  }, ms);
-}
+const yardEl = $('pet-yard');
+const houseEl = $('pet-house');
+const pets = [];
+const sleepers = new Set();     // 지금 집에서 자고 있는 펫 id
+const pendingFeeds = new Set(); // 서버 저장이 아직 확인되지 않은 밥 주기 (펫 id)
+let nextPlayAt = Date.now() + (20 + Math.random() * 20) * 1000;
 
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+const petRest = () => 120 + Math.random() * 300; // 동작 사이 아주 짧게만 쉰다
+const petMaxX = () => Math.max(0, yardEl.clientWidth - houseEl.offsetWidth - 14 - PET_SIZE);
+const doorX = () => yardEl.clientWidth - 12 - houseEl.offsetWidth / 2 - PET_SIZE / 2; // 집 문 앞
 
-// 정해진 곳까지 걸어가고 끝나면 돌아온다 (일과·친구 방문용)
-async function petWalk(x, speed = 60, gait = 'walking') {
-  const seconds = Math.abs(x - petX) / speed;
-  petBody.classList.toggle('face-left', x < petX);
-  petBody.classList.add(gait);
-  setPetX(x, seconds);
-  await wait(seconds * 1000);
-  petBody.classList.remove(gait);
-}
-
-async function petPlayOnce(className, ms) {
-  petBody.classList.add(className);
-  await wait(ms);
-  petBody.classList.remove(className);
-}
-
-function spawnPetBits(symbols, count, className) {
-  for (let i = 0; i < count; i++) {
-    const bit = el('span', className, pick(symbols));
-    bit.style.setProperty('--x', `${(Math.random() - 0.5) * 90}px`);
-    bit.style.setProperty('--y', `${-50 - Math.random() * 60}px`);
-    bit.style.animationDelay = `${Math.random() * 0.8}s`;
-    petEl.append(bit);
-    setTimeout(() => bit.remove(), 2600);
+class Pet {
+  constructor(id) {
+    this.id = id;
+    this.type = PET_TYPES[id];
+    this.timer = null;
+    this.busy = false; // 밥 먹기·낮잠·같이 놀기 중에는 혼자 돌아다니지 않는다
+    this.sayUntil = 0;
+    this.seenFedAt = this.data.fedAt;
+    // 다 같이 자러 가지 않도록 첫 낮잠 시각을 엇갈리게
+    this.nextSleepAt = Date.now() + SLEEP_EVERY_MS * (0.3 + Math.random() * 0.7);
+    this.build();
+    this.setX(Math.random() * petMaxX());
   }
-}
 
-// 냠냠 → 배불러 애니메이션
-function playFed(line) {
-  petBusy = true;
-  freezePet();
-  petBody.classList.remove('hungry', 'face-left');
-  hidePetBubble();
+  get data() {
+    return state.pets[this.id];
+  }
 
-  const food = el('span', 'pet-food', '🍙');
-  petEl.append(food);
-  petBody.classList.add('eating');
-  showPetBubble('냠냠…', 'eating');
+  build() {
+    this.el = el('div', 'pet');
+    this.bubble = el('button', 'pet-bubble');
+    this.bubble.type = 'button';
+    this.bubble.title = `${this.type.name}에게 밥 주기`;
+    this.bubble.hidden = true;
+    this.body = el('div', 'pet-body');
+    this.body.title = `${this.type.name} 쓰다듬기`;
+    const img = el('img');
+    img.src = this.type.img;
+    img.alt = this.type.name;
+    const breath = el('div', 'pet-breath');
+    breath.append(img);
+    this.body.append(el('span', 'pet-umbrella', '☂️'), breath);
+    this.el.append(this.bubble, this.body, el('span', 'pet-shadow'));
+    $('pets').append(this.el);
 
-  setTimeout(() => {
-    food.remove();
-    petBody.classList.remove('eating');
-    petBody.classList.add('full');
-    showPetBubble(line, 'full');
-    spawnPetBits(['💕', '💖', '✨', '🌸'], 12, 'pet-heart');
-  }, 1800);
+    this.bubble.addEventListener('click', () => this.feed());
+    this.body.addEventListener('click', () => this.pat());
+  }
 
-  setTimeout(() => {
-    petBody.classList.remove('full');
-    hidePetBubble();
-    petBusy = false;
-    updatePet();
-    petNextAction();
-  }, 1800 + 3600);
-}
+  hungry() {
+    return Date.now() - this.data.fedAt > HUNGRY_AFTER_MS;
+  }
 
-function feedPet() {
-  if (!isHungry() || petBusy) return;
-  update(() => {
-    state.pet = { fedAt: Date.now(), fedBy: getNickname() || '누군가', meals: state.pet.meals + 1 };
-  });
-  petFeedPending = true;
-  seenFedAt = state.pet.fedAt;
-  playFed('배불러~ 💕');
-}
+  /* --- 이동과 동작 --- */
 
-// 화면을 다시 그릴 때마다 배고픔 상태를 반영한다
-function updatePet() {
-  if (!petEl) return;
-  const { fedAt, fedBy } = state.pet;
-  if (fedAt > seenFedAt) {
-    seenFedAt = fedAt;
-    // 방금 다른 사람이 밥을 줬으면 같이 기뻐한다
-    if (!petBusy && Date.now() - fedAt < 30000) {
-      playFed(`${fedBy || '누군가'}가 밥 줬어! 💕`);
+  schedule(ms, fn = () => this.next()) {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(fn, ms);
+  }
+
+  setX(x, seconds = 0) {
+    this.el.style.transitionDuration = `${seconds}s`;
+    this.el.style.transform = `translateX(${x}px)`;
+    this.x = x;
+  }
+
+  // 하던 동작을 멈추고 지금 위치에 바로 선다
+  freeze() {
+    clearTimeout(this.timer);
+    const { m41 } = new DOMMatrix(getComputedStyle(this.el).transform);
+    this.setX(m41);
+    this.body.classList.remove(...PET_MOTIONS);
+  }
+
+  // gait: walking(뒤뚱) / running(총총) / hopping(깡총깡총)
+  move(x, speed, gait) {
+    if (Math.abs(x - this.x) < 50) x = petMaxX() - x; // 너무 가까우면 반대편으로
+    const seconds = Math.abs(x - this.x) / (speed * this.type.speed);
+    this.body.classList.toggle('face-left', x < this.x);
+    this.body.classList.add(gait);
+    this.setX(x, seconds);
+    this.schedule(seconds * 1000, () => {
+      this.body.classList.remove(gait);
+      this.schedule(petRest());
+    });
+  }
+
+  play(className, ms) {
+    this.body.classList.add(className);
+    this.schedule(ms, () => {
+      this.body.classList.remove(className);
+      this.schedule(petRest());
+    });
+  }
+
+  // 혼자 쉬지 않고 돌아다닌다. 배고프면 느릿느릿, 한숨이 늘어난다
+  next() {
+    if (this.busy || reduceMotion.matches) return;
+    const target = Math.random() * petMaxX();
+    const r = Math.random();
+    if (this.hungry()) {
+      if (r < 0.6) this.move(target, 28, 'walking');
+      else if (r < 0.85) this.play('sigh', 1600);
+      else this.play('look', 1400);
       return;
     }
+    if (weather === 'snow' && r < 0.1) runPetEvent([this], () => this.buildSnowman());
+    else if (r < 0.38) this.move(target, 60, 'walking');
+    else if (r < 0.53) this.move(target, 140, 'running');
+    else if (r < 0.68) this.move(target, 75, 'hopping');
+    else if (r < 0.76) this.play('spin', 900);
+    else if (r < 0.84) this.play('dance', 1600);
+    else if (r < 0.92) this.play('look', 1300);
+    else this.play('stretch', 1300);
   }
-  if (petBusy) return;
-  const hungry = isHungry();
-  petBody.classList.toggle('hungry', hungry);
-  if (hungry) showPetBubble('🍙 배고파…', 'hungry');
-  else if (Date.now() >= sayUntil) hidePetBubble();
-  $('pet-meals').textContent = state.pet.meals ? `🍙 ${state.pet.meals}` : '';
+
+  // 이벤트용: 정해진 곳까지 걸어가고 끝나면 돌아온다
+  async walk(x, speed = 60, gait = 'walking') {
+    const seconds = Math.abs(x - this.x) / (speed * this.type.speed);
+    this.body.classList.toggle('face-left', x < this.x);
+    this.body.classList.add(gait);
+    this.setX(x, seconds);
+    await wait(seconds * 1000);
+    this.body.classList.remove(gait);
+  }
+
+  async playOnce(className, ms) {
+    this.body.classList.add(className);
+    await wait(ms);
+    this.body.classList.remove(className);
+  }
+
+  /* --- 말구름 --- */
+
+  showBubble(text, kind) {
+    this.bubble.textContent = text;
+    this.bubble.className = `pet-bubble ${kind}`;
+    this.bubble.hidden = false;
+    this.bubble.disabled = kind !== 'hungry';
+  }
+
+  hideBubble() {
+    this.bubble.hidden = true;
+  }
+
+  // 잠깐 한마디. 배고픔 말구름이 떠 있으면 그쪽이 우선이다
+  say(text, ms = 2000) {
+    if (!this.busy && this.hungry()) return;
+    this.showBubble(text, 'say');
+    this.sayUntil = Date.now() + ms;
+    setTimeout(() => {
+      if (Date.now() < this.sayUntil) return; // 그 사이 다른 말을 했다
+      this.hideBubble();
+      if (!this.busy) this.update();
+    }, ms);
+  }
+
+  spawn(symbols, count) {
+    for (let i = 0; i < count; i++) {
+      const bit = el('span', 'pet-heart', pick(symbols));
+      bit.style.setProperty('--x', `${(Math.random() - 0.5) * 90}px`);
+      bit.style.setProperty('--y', `${-50 - Math.random() * 60}px`);
+      bit.style.animationDelay = `${Math.random() * 0.8}s`;
+      this.el.append(bit);
+      setTimeout(() => bit.remove(), 2600);
+    }
+  }
+
+  /* --- 밥 주기 --- */
+
+  feed() {
+    if (!this.hungry() || this.busy) return;
+    const fedAt = Date.now();
+    this.seenFedAt = fedAt; // 내가 준 밥을 "남이 줬다"로 착각하지 않게 먼저 표시
+    pendingFeeds.add(this.id);
+    this.playFed(this.type.lines.fed);
+    update(() => {
+      state.pets[this.id] = { fedAt, fedBy: getNickname() || '누군가', meals: this.data.meals + 1 };
+    });
+  }
+
+  // 냠냠 → 배불러
+  playFed(line) {
+    runPetEvent([this], async () => {
+      this.body.classList.remove('face-left');
+      const food = el('span', 'pet-food', '🍙');
+      this.el.append(food);
+      this.body.classList.add('eating');
+      this.showBubble('냠냠…', 'eating');
+      await wait(1800);
+
+      food.remove();
+      this.body.classList.remove('eating');
+      this.body.classList.add('full');
+      this.showBubble(line, 'full');
+      this.spawn(['💕', '💖', '✨', '🌸'], 12);
+      await wait(3600);
+    });
+  }
+
+  // 화면을 다시 그릴 때마다 배고픔 상태를 반영한다
+  update() {
+    const { fedAt, fedBy } = this.data;
+    if (fedAt > this.seenFedAt) {
+      this.seenFedAt = fedAt;
+      // 방금 다른 사람이 밥을 줬으면 같이 기뻐한다
+      if (!this.busy && Date.now() - fedAt < 30000) {
+        this.playFed(`${fedBy || '누군가'}가 밥 줬어! 💕`);
+        return;
+      }
+    }
+    if (this.busy) return;
+    const hungry = this.hungry();
+    this.body.classList.toggle('hungry', hungry);
+    if (hungry) this.showBubble(this.type.lines.hungry, 'hungry');
+    else if (Date.now() >= this.sayUntil) this.hideBubble();
+  }
+
+  // 쓰다듬으면 하트 하나 뿅
+  pat() {
+    if (this.busy) return;
+    this.spawn(['💗'], 1);
+    if (!this.hungry()) {
+      this.freeze();
+      this.play('hop', 900);
+    }
+  }
+
+  /* --- 낮잠 --- */
+
+  async sleep() {
+    this.showBubble(this.type.lines.sleepy, 'say');
+    await this.walk(doorX(), 55);
+    this.hideBubble();
+
+    // 문으로 쏙 들어간다
+    this.body.classList.add('entering');
+    await wait(700);
+    this.el.classList.add('inside');
+    this.body.classList.remove('entering');
+    sleepers.add(this.id);
+    houseEl.classList.add('sleeping');
+
+    await wait(SLEEP_MS);
+
+    // 기지개 켜며 나온다
+    sleepers.delete(this.id);
+    houseEl.classList.toggle('sleeping', sleepers.size > 0);
+    this.el.classList.remove('inside');
+    this.body.classList.add('exiting');
+    await wait(700);
+    this.body.classList.remove('exiting');
+    this.showBubble(this.type.lines.wake, 'say');
+    await this.playOnce('stretch', 1300);
+    this.hideBubble();
+    await this.walk(Math.random() * petMaxX(), 60);
+  }
+
+  // 눈 오는 날엔 눈사람 옆에서 토닥토닥
+  async buildSnowman() {
+    await this.walk(50, 70);
+    this.body.classList.add('face-left');
+    this.say(this.type.lines.snow, 2400);
+    await this.playOnce('dance', 1600);
+    const snowman = $('snowman');
+    snowman.classList.add('grow');
+    setTimeout(() => snowman.classList.remove('grow'), 600);
+  }
 }
 
-petBubble.addEventListener('click', feedPet);
-
-// 쓰다듬으면 하트 하나 뿅
-petBody.addEventListener('click', () => {
-  if (petBusy) return;
-  spawnPetBits(['💗'], 1, 'pet-heart');
-  if (!isHungry()) {
-    freezePet();
-    petPlay('hop', 900);
-  }
-});
-
-window.addEventListener('resize', () => {
-  if (!petBusy && petX > petMaxX()) setPetX(petMaxX());
-});
-
-/* ---------- 펫: 일과 스케줄러 (낮잠·친구 방문) ---------- */
-
-const SLEEP_EVERY_MS = 5 * 60 * 1000; // 5분마다 낮잠
-const SLEEP_MS = 30 * 1000;           // 30초 동안 잔다
-const visitGap = () => (120 + Math.random() * 120) * 1000; // 친구는 2~4분마다
-
-const houseEl = $('pet-house');
-const friendEl = $('friend');
-const friendBody = $('friend-body');
-const friendBubble = $('friend-bubble');
-
-let nextSleepAt = Date.now() + SLEEP_EVERY_MS;
-let nextVisitAt = Date.now() + (30 + Math.random() * 30) * 1000; // 첫 방문은 30~60초 뒤
-
-// 한 번에 하나의 이벤트만 실행하고, 도중에 에러가 나도 펫이 멈춘 채로 남지 않게 정리한다
-async function runPetEvent(event) {
-  petBusy = true;
-  freezePet();
-  hidePetBubble();
-  petBody.classList.remove('hungry');
+// 펫 이벤트(밥·낮잠·같이 놀기)를 실행한다. 도중에 에러가 나도 펫이 멈춘 채로 남지 않게 정리한다
+async function runPetEvent(group, event) {
+  group.forEach((p) => {
+    p.busy = true;
+    p.freeze();
+    p.hideBubble();
+    p.body.classList.remove('hungry');
+  });
   try {
     await event();
   } catch (e) {
     console.warn('펫 이벤트 중 오류', e);
   } finally {
-    petEl.classList.remove('inside');
-    petBody.classList.remove('entering', 'exiting', ...PET_MOTIONS);
-    houseEl.classList.remove('sleeping');
-    friendEl.hidden = true;
-    friendBubble.hidden = true;
-    hidePetBubble();
-    petBusy = false;
-    updatePet();
-    petSchedule(petRest());
+    group.forEach((p) => {
+      p.el.classList.remove('inside');
+      p.body.classList.remove('entering', 'exiting', 'eating', 'full', ...PET_MOTIONS);
+      p.el.querySelector('.pet-food')?.remove();
+      sleepers.delete(p.id);
+      p.hideBubble();
+      p.busy = false;
+      p.update();
+      p.schedule(petRest());
+    });
+    houseEl.classList.toggle('sleeping', sleepers.size > 0);
   }
 }
 
-// 탭을 보고 있을 때만, 바쁘지 않을 때 차례가 된 이벤트를 실행한다
+async function bothPlay(group, className, ms) {
+  group.forEach((p) => p.body.classList.add(className));
+  await wait(ms);
+  group.forEach((p) => p.body.classList.remove(className));
+}
+
+// a가 b에게 놀러 가서 같이 논다
+async function playTogether(a, b) {
+  const side = b.x > PET_SIZE ? -1 : 1;
+  const spot = Math.min(Math.max(b.x + side * (PET_SIZE - 16), 0), petMaxX());
+  a.say(a.type.lines.play, 1800);
+  await a.walk(spot, 80, 'hopping');
+
+  a.body.classList.toggle('face-left', b.x < a.x);
+  b.body.classList.toggle('face-left', a.x < b.x);
+  b.say(b.type.lines.play, 1800);
+  await bothPlay([a, b], 'hop', 900);
+  a.spawn(['💕', '✨', '🎵'], 6);
+  await bothPlay([a, b], 'dance', 1600);
+  await a.playOnce('spin', 900);
+  await b.playOnce('spin', 900);
+  b.spawn(['💕', '💖', '🌸'], 8);
+}
+
+// 탭을 보고 있을 때만, 차례가 된 낮잠과 같이 놀기를 시작한다
 function petRoutine() {
-  if (petBusy || document.hidden) return;
+  if (document.hidden) return;
   const now = Date.now();
-  if (now >= nextSleepAt) {
-    nextSleepAt = Infinity;
-    runPetEvent(goSleep).then(() => { nextSleepAt = Date.now() + SLEEP_EVERY_MS; });
-  } else if (now >= nextVisitAt) {
-    nextVisitAt = Infinity;
-    runPetEvent(friendVisit).then(() => { nextVisitAt = Date.now() + visitGap(); });
-  }
+  pets.forEach((p) => {
+    if (p.busy || now < p.nextSleepAt) return;
+    p.nextSleepAt = Infinity;
+    runPetEvent([p], () => p.sleep()).then(() => { p.nextSleepAt = Date.now() + SLEEP_EVERY_MS; });
+  });
+
+  if (now < nextPlayAt) return;
+  const free = pets.filter((p) => !p.busy && !p.hungry());
+  if (free.length < 2) return;
+  nextPlayAt = Infinity;
+  const a = pick(free);
+  const b = pick(free.filter((p) => p !== a));
+  runPetEvent([a, b], () => playTogether(a, b)).then(() => { nextPlayAt = Date.now() + playGap(); });
 }
 
-/* ---------- 펫: 낮잠 ---------- */
+function updatePet() {
+  pets.forEach((p) => p.update());
+  const meals = PET_IDS.reduce((sum, id) => sum + state.pets[id].meals, 0);
+  $('pet-meals').textContent = meals ? `🍙 ${meals}` : '';
+}
 
-const doorX = () => yardEl.clientWidth - 50 - PET_SIZE / 2; // 집 문 앞
-
-async function goSleep() {
-  showPetBubble('졸려… 💤', 'say');
-  await petWalk(doorX(), 55);
-  hidePetBubble();
-
-  // 문으로 쏙 들어간다
-  petBody.classList.add('entering');
-  await wait(700);
-  petEl.classList.add('inside');
-  petBody.classList.remove('entering');
-  houseEl.classList.add('sleeping');
-
-  await wait(SLEEP_MS);
-
-  // 기지개 켜며 나온다
-  houseEl.classList.remove('sleeping');
-  petEl.classList.remove('inside');
-  petBody.classList.add('exiting');
-  await wait(700);
-  petBody.classList.remove('exiting');
-  showPetBubble('잘 잤다~ ☀️', 'say');
-  await petPlayOnce('stretch', 1300);
-  hidePetBubble();
-  await petWalk(Math.random() * petMaxX(), 60);
+function initPets() {
+  PET_IDS.forEach((id) => pets.push(new Pet(id)));
+  updatePet();
+  pets.forEach((p) => p.schedule(Math.random() * 600));
 }
 
 // 자는 동안 집을 누르면
@@ -1157,84 +1261,9 @@ houseEl.addEventListener('click', () => {
   setTimeout(() => talk.remove(), 1600);
 });
 
-/* ---------- 펫: 친구 방문 ---------- */
-
-const FRIENDS = [
-  { img: 'img/usagi-pet.png', hello: '야하!', play: '우라~!', bye: '하아?! 또 올게!' },
-  { img: 'img/momonga-pet.png', hello: '놀아 줘!', play: '나 귀엽지?', bye: '또 올게~' },
-];
-let friendX = -120;
-
-function setFriendX(x, seconds = 0) {
-  friendEl.style.transitionDuration = `${seconds}s`;
-  friendEl.style.transform = `translateX(${x}px)`;
-  friendX = x;
-}
-
-async function friendWalk(x, speed, gait) {
-  const seconds = Math.abs(x - friendX) / speed;
-  friendBody.classList.toggle('face-left', x < friendX);
-  friendBody.classList.add(gait);
-  setFriendX(x, seconds);
-  await wait(seconds * 1000);
-  friendBody.classList.remove(gait);
-}
-
-function friendSay(text, ms = 2000) {
-  friendBubble.textContent = text;
-  friendBubble.hidden = false;
-  setTimeout(() => { if (friendBubble.textContent === text) friendBubble.hidden = true; }, ms);
-}
-
-async function bothPlay(className, ms) {
-  petBody.classList.add(className);
-  friendBody.classList.add(className);
-  await wait(ms);
-  petBody.classList.remove(className);
-  friendBody.classList.remove(className);
-}
-
-// 이미지를 다 불러온 뒤에 등장한다 (깨진 이미지로 들어오지 않게)
-function loadFriendImage(src) {
-  const img = $('friend-img');
-  return new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = () => reject(new Error(`친구 이미지를 불러오지 못했습니다: ${src}`));
-    img.src = src;
-    if (img.complete && img.naturalWidth) resolve();
-  });
-}
-
-async function friendVisit() {
-  const friend = pick(FRIENDS);
-  await loadFriendImage(friend.img);
-
-  // 친구가 설 자리가 있도록 치이카와는 조금 안쪽으로
-  if (petX < 90) await petWalk(Math.min(90 + Math.random() * 40, petMaxX()));
-  petBody.classList.add('face-left');
-
-  friendBody.classList.remove('face-left');
-  setFriendX(-110);
-  friendEl.hidden = false;
-  friendEl.getBoundingClientRect(); // 시작 위치를 먼저 그린 뒤 걷게 한다
-  friendSay(friend.hello);
-  await friendWalk(petX - 72, 80, 'hopping');
-
-  petSay('와아! 왔구나!', 1800);
-  await bothPlay('hop', 900);
-  spawnPetBits(['💕', '✨', '🎵'], 8, 'pet-heart');
-  friendSay(friend.play);
-  await bothPlay('dance', 1600);
-  await petPlayOnce('spin', 900);
-  friendBody.classList.add('spin');
-  await wait(900);
-  friendBody.classList.remove('spin');
-  spawnPetBits(['💕', '💖', '🌸'], 10, 'pet-heart');
-
-  friendSay(friend.bye, 2400);
-  petSay('또 와~!', 2400);
-  await friendWalk(-120, 80, 'walking');
-}
+window.addEventListener('resize', () => {
+  pets.forEach((p) => { if (!p.busy && p.x > petMaxX()) p.setX(petMaxX()); });
+});
 
 /* ---------- 펫: 날씨 (서울 실제 날씨, ?weather=rain|snow|clear|cloudy 로 미리보기) ---------- */
 
@@ -1243,7 +1272,7 @@ const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const WEATHERS = ['clear', 'cloudy', 'rain', 'snow'];
 let weather = 'clear';
 
-// Open-Meteo 날씨 코드 → 마당 날씨
+// Open-Meteo 날씨 코드 → 놀이터 날씨
 function weatherFromCode(code) {
   if ([71, 73, 75, 77, 85, 86].includes(code)) return 'snow';
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95) return 'rain';
@@ -1260,7 +1289,7 @@ function applyWeather(kind) {
   if (reduceMotion.matches) return;
   if (kind === 'rain' || kind === 'snow') {
     const rain = kind === 'rain';
-    for (let i = 0; i < (rain ? 40 : 26); i++) {
+    for (let i = 0; i < (rain ? 60 : 40); i++) {
       const drop = el('span', rain ? 'raindrop' : 'snowflake', rain ? '' : pick(['❄', '❅', '•']));
       drop.style.left = `${Math.random() * 100}%`;
       drop.style.animationDuration = `${rain ? 0.6 + Math.random() * 0.4 : 3 + Math.random() * 3}s`;
@@ -1289,17 +1318,6 @@ async function loadWeather() {
     console.warn('날씨를 불러오지 못했습니다.', e);
     if (!yardEl.dataset.weather) applyWeather('clear');
   }
-}
-
-// 눈 오는 날엔 눈사람 옆에서 토닥토닥
-async function buildSnowman() {
-  await petWalk(44, 70);
-  petBody.classList.add('face-left');
-  petSay('눈사람 만들자! ⛄', 2400);
-  await petPlayOnce('dance', 1600);
-  const snowman = $('snowman');
-  snowman.classList.add('grow');
-  setTimeout(() => snowman.classList.remove('grow'), 600);
 }
 
 /* ---------- 서버 동기화 ---------- */
@@ -1348,8 +1366,13 @@ function applyRemote(remote) {
   const next = normalize(remote.data) || defaultState();
   const commentsMerged = mergePendingComments(next);
   // 내가 준 밥이 아직 저장되지 않았다면 그 기록을 유지한다
-  const feedMerged = petFeedPending && state.pet.fedAt > next.pet.fedAt;
-  if (feedMerged) next.pet = state.pet;
+  let feedMerged = false;
+  pendingFeeds.forEach((id) => {
+    if (state.pets[id].fedAt > next.pets[id].fedAt) {
+      next.pets[id] = state.pets[id];
+      feedMerged = true;
+    }
+  });
   const merged = commentsMerged || feedMerged;
   state = next;
   version = remote.version;
@@ -1399,7 +1422,7 @@ async function flush() {
   inflight = true;
   dirty = false;
   const sentComments = [...pendingComments];
-  const sentFeed = petFeedPending;
+  const sentFeeds = [...pendingFeeds];
   try {
     const res = await api('PUT', JSON.stringify({ data: state, version }));
     if (res.status === 409) {
@@ -1415,7 +1438,7 @@ async function flush() {
     } else {
       version = (await res.json()).version;
       sentComments.forEach((id) => pendingComments.delete(id));
-      if (sentFeed) petFeedPending = false;
+      sentFeeds.forEach((id) => pendingFeeds.delete(id));
     }
     setSync(dirty ? 'saving' : 'saved');
   } catch (e) {
@@ -1453,8 +1476,7 @@ async function pull() {
 render();
 renderNickname();
 if (!getNickname()) openNickDialog();
-setPetX(Math.random() * petMaxX());
-petNextAction();
+initPets();
 setInterval(updatePet, 10000);
 setInterval(petRoutine, 3000);
 loadWeather();
