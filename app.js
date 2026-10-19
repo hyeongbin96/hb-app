@@ -687,8 +687,8 @@ $('add-column').addEventListener('click', addColumn);
 const CHEERS = [
   { img: 'img/usagi.png', line: '야하!' },
   { img: 'img/usagi.png', line: '우라~!' },
-  { img: 'img/chiikawa.png', line: '해냈다…!' },
-  { img: 'img/momonga.png', line: '나 칭찬해 줘!' },
+  { img: 'img/chiikawa.png', line: '타쿠타쿠!' },
+  { img: 'img/momonga.png', line: '뿌릿' },
 ];
 const CONFETTI = ['🌸', '✨', '🍓', '⭐', '💖', '🎀'];
 
