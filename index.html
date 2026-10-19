@@ -121,7 +121,12 @@
   </dialog>
 
   <div id="pet-yard" class="pet-yard">
-    <div class="pet-house" aria-hidden="true">
+    <div id="weather-layer" class="weather-layer" aria-hidden="true"></div>
+    <span id="weather-badge" class="weather-badge"></span>
+    <span id="snowman" class="snowman" aria-hidden="true">⛄</span>
+    <div id="pet-house" class="pet-house" aria-hidden="true">
+      <span class="pet-zzz">💤</span>
+      <span class="pet-zzz late">💤</span>
       <svg viewBox="0 0 100 96" xmlns="http://www.w3.org/2000/svg">
         <rect x="66" y="10" width="11" height="22" rx="3" fill="#e8a0b4" stroke="#6b5b6e" stroke-width="2.5"/>
         <rect x="16" y="42" width="68" height="46" rx="10" fill="#fff4e0" stroke="#6b5b6e" stroke-width="2.5"/>
@@ -142,7 +147,16 @@
     <div id="pet" class="pet">
       <button id="pet-bubble" class="pet-bubble" type="button" title="밥 주기" hidden></button>
       <div id="pet-body" class="pet-body" title="쓰다듬기">
+        <span class="pet-umbrella" aria-hidden="true">☂️</span>
         <div class="pet-breath"><img src="img/chiikawa-pet.png" alt="치이카와"></div>
+      </div>
+      <span class="pet-shadow"></span>
+    </div>
+    <div id="friend" class="pet friend" hidden>
+      <span id="friend-bubble" class="pet-bubble say" hidden></span>
+      <div id="friend-body" class="pet-body friend-body">
+        <span class="pet-umbrella" aria-hidden="true">☂️</span>
+        <div class="pet-breath"><img id="friend-img" src="img/usagi-pet.png" alt=""></div>
       </div>
       <span class="pet-shadow"></span>
     </div>

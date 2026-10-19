@@ -931,7 +931,8 @@ function petNextAction() {
     else petPlay('look', 1400);
     return;
   }
-  if (r < 0.38) petMove(target, 60, 'walking');
+  if (weather === 'snow' && r < 0.15) buildSnowman();
+  else if (r < 0.38) petMove(target, 60, 'walking');
   else if (r < 0.53) petMove(target, 140, 'running');
   else if (r < 0.68) petMove(target, 75, 'hopping');
   else if (r < 0.76) petPlay('spin', 900);
@@ -949,6 +950,37 @@ function showPetBubble(text, kind) {
 
 function hidePetBubble() {
   petBubble.hidden = true;
+}
+
+// 잠깐 한마디. 배고픔 말구름이 뜨는 동안에는 그쪽이 우선이다
+let sayUntil = 0;
+function petSay(text, ms = 2000) {
+  if (!petBusy && isHungry()) return;
+  showPetBubble(text, 'say');
+  sayUntil = Date.now() + ms;
+  setTimeout(() => {
+    if (Date.now() < sayUntil) return; // 그 사이 다른 말을 했다
+    hidePetBubble();
+    if (!petBusy) updatePet();
+  }, ms);
+}
+
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+// 정해진 곳까지 걸어가고 끝나면 돌아온다 (일과·친구 방문용)
+async function petWalk(x, speed = 60, gait = 'walking') {
+  const seconds = Math.abs(x - petX) / speed;
+  petBody.classList.toggle('face-left', x < petX);
+  petBody.classList.add(gait);
+  setPetX(x, seconds);
+  await wait(seconds * 1000);
+  petBody.classList.remove(gait);
+}
+
+async function petPlayOnce(className, ms) {
+  petBody.classList.add(className);
+  await wait(ms);
+  petBody.classList.remove(className);
 }
 
 function spawnPetBits(symbols, count, className) {
@@ -1017,7 +1049,7 @@ function updatePet() {
   const hungry = isHungry();
   petBody.classList.toggle('hungry', hungry);
   if (hungry) showPetBubble('🍙 배고파…', 'hungry');
-  else hidePetBubble();
+  else if (Date.now() >= sayUntil) hidePetBubble();
   $('pet-meals').textContent = state.pet.meals ? `🍙 ${state.pet.meals}` : '';
 }
 
@@ -1034,8 +1066,231 @@ petBody.addEventListener('click', () => {
 });
 
 window.addEventListener('resize', () => {
-  if (petX > petMaxX()) setPetX(petMaxX());
+  if (!petBusy && petX > petMaxX()) setPetX(petMaxX());
 });
+
+/* ---------- 펫: 하루 일과 (5분마다 집에 들어가 15초 낮잠) ---------- */
+
+const SLEEP_EVERY_MS = 5 * 60 * 1000;
+const SLEEP_MS = 15 * 1000;
+const houseEl = $('pet-house');
+
+const doorX = () => yardEl.clientWidth - 50 - PET_SIZE / 2; // 집 문 앞
+
+async function goSleep() {
+  if (petBusy) {
+    setTimeout(goSleep, 5000); // 밥 먹는 중이거나 친구가 왔으면 조금 뒤에
+    return;
+  }
+  petBusy = true;
+  freezePet();
+  hidePetBubble();
+  petBody.classList.remove('hungry');
+
+  showPetBubble('졸려… 💤', 'say');
+  await petWalk(doorX(), 55);
+  hidePetBubble();
+
+  // 문으로 쏙 들어간다
+  petBody.classList.add('entering');
+  await wait(700);
+  petEl.classList.add('inside');
+  petBody.classList.remove('entering');
+  houseEl.classList.add('sleeping');
+
+  await wait(SLEEP_MS);
+
+  // 기지개 켜며 나온다
+  houseEl.classList.remove('sleeping');
+  petEl.classList.remove('inside');
+  petBody.classList.add('exiting');
+  await wait(700);
+  petBody.classList.remove('exiting');
+  showPetBubble('잘 잤다~ ☀️', 'say');
+  await petPlayOnce('stretch', 1300);
+  hidePetBubble();
+  await petWalk(Math.random() * petMaxX(), 60);
+
+  petBusy = false;
+  updatePet();
+  petSchedule(petRest());
+  setTimeout(goSleep, SLEEP_EVERY_MS);
+}
+
+// 자는 동안 집을 누르면
+houseEl.addEventListener('click', () => {
+  if (!houseEl.classList.contains('sleeping') || houseEl.querySelector('.house-talk')) return;
+  const talk = el('span', 'house-talk', pick(['쿨쿨…', '음냐음냐…', '깨우지 마…']));
+  houseEl.append(talk);
+  setTimeout(() => talk.remove(), 1600);
+});
+
+/* ---------- 펫: 친구 방문 ---------- */
+
+const FRIENDS = [
+  { img: 'img/usagi-pet.png', hello: '야하!', play: '우라~!', bye: '하아?! 또 올게!' },
+  { img: 'img/momonga-pet.png', hello: '놀아 줘!', play: '나 귀엽지?', bye: '또 올게~' },
+];
+const friendEl = $('friend');
+const friendBody = $('friend-body');
+const friendBubble = $('friend-bubble');
+let friendX = -120;
+
+function scheduleVisit() {
+  setTimeout(friendVisit, (120 + Math.random() * 120) * 1000); // 2~4분마다
+}
+
+function setFriendX(x, seconds = 0) {
+  friendEl.style.transitionDuration = `${seconds}s`;
+  friendEl.style.transform = `translateX(${x}px)`;
+  friendX = x;
+}
+
+async function friendWalk(x, speed, gait) {
+  const seconds = Math.abs(x - friendX) / speed;
+  friendBody.classList.toggle('face-left', x < friendX);
+  friendBody.classList.add(gait);
+  setFriendX(x, seconds);
+  await wait(seconds * 1000);
+  friendBody.classList.remove(gait);
+}
+
+function friendSay(text, ms = 2000) {
+  friendBubble.textContent = text;
+  friendBubble.hidden = false;
+  setTimeout(() => { if (friendBubble.textContent === text) friendBubble.hidden = true; }, ms);
+}
+
+async function bothPlay(className, ms) {
+  petBody.classList.add(className);
+  friendBody.classList.add(className);
+  await wait(ms);
+  petBody.classList.remove(className);
+  friendBody.classList.remove(className);
+}
+
+async function friendVisit() {
+  if (petBusy || reduceMotion.matches) {
+    setTimeout(friendVisit, 10000);
+    return;
+  }
+  petBusy = true;
+  freezePet();
+  hidePetBubble();
+  petBody.classList.remove('hungry');
+
+  const friend = pick(FRIENDS);
+  $('friend-img').src = friend.img;
+
+  // 친구가 설 자리가 있도록 치이카와는 조금 안쪽으로
+  if (petX < 90) await petWalk(Math.min(90 + Math.random() * 40, Math.max(petMaxX(), 0)));
+  petBody.classList.add('face-left');
+
+  setFriendX(-110);
+  friendEl.hidden = false;
+  friendEl.getBoundingClientRect(); // 시작 위치를 먼저 그린 뒤 걷게 한다
+  friendSay(friend.hello);
+  await friendWalk(petX - 72, 80, 'hopping');
+
+  petSay('와아! 왔구나!', 1800);
+  await bothPlay('hop', 900);
+  spawnPetBits(['💕', '✨', '🎵'], 8, 'pet-heart');
+  friendSay(friend.play);
+  await bothPlay('dance', 1600);
+  await petPlayOnce('spin', 900);
+  friendBody.classList.add('spin');
+  await wait(900);
+  friendBody.classList.remove('spin');
+  spawnPetBits(['💕', '💖', '🌸'], 10, 'pet-heart');
+
+  friendSay(friend.bye, 2400);
+  petSay('또 와~!', 2400);
+  await friendWalk(-120, 80, 'walking');
+  friendEl.hidden = true;
+  friendBubble.hidden = true;
+  friendBody.classList.remove('face-left');
+
+  petBusy = false;
+  updatePet();
+  petSchedule(petRest());
+  scheduleVisit();
+}
+
+/* ---------- 펫: 날씨 (서울 실제 날씨, ?weather=rain|snow|clear|cloudy 로 미리보기) ---------- */
+
+const WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.978&current=temperature_2m,weather_code&timezone=Asia%2FSeoul';
+const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+const WEATHER_INFO = {
+  clear: { icon: '☀️', name: '맑음' },
+  cloudy: { icon: '☁️', name: '흐림' },
+  rain: { icon: '☔', name: '비' },
+  snow: { icon: '⛄', name: '눈' },
+};
+let weather = 'clear';
+
+// Open-Meteo 날씨 코드 → 마당 날씨
+function weatherFromCode(code) {
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'snow';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95) return 'rain';
+  if (code >= 2) return 'cloudy';
+  return 'clear';
+}
+
+function applyWeather(kind, temp) {
+  weather = kind;
+  yardEl.dataset.weather = kind;
+  const info = WEATHER_INFO[kind];
+  $('weather-badge').textContent = `${info.icon} 서울 ${info.name}${temp === null ? '' : ` ${temp}°`}`;
+
+  const layer = $('weather-layer');
+  layer.replaceChildren();
+  if (reduceMotion.matches) return;
+  if (kind === 'rain' || kind === 'snow') {
+    const rain = kind === 'rain';
+    for (let i = 0; i < (rain ? 40 : 26); i++) {
+      const drop = el('span', rain ? 'raindrop' : 'snowflake', rain ? '' : pick(['❄', '❅', '•']));
+      drop.style.left = `${Math.random() * 100}%`;
+      drop.style.animationDuration = `${rain ? 0.6 + Math.random() * 0.4 : 3 + Math.random() * 3}s`;
+      drop.style.animationDelay = `${-Math.random() * 6}s`;
+      layer.append(drop);
+    }
+  } else if (kind === 'clear') {
+    layer.append(el('span', 'sun', '☀️'));
+  } else {
+    layer.append(el('span', 'cloud', '☁️'), el('span', 'cloud small', '☁️'));
+  }
+}
+
+async function loadWeather() {
+  const preview = new URLSearchParams(location.search).get('weather');
+  if (WEATHER_INFO[preview]) {
+    applyWeather(preview, null);
+    return;
+  }
+  try {
+    const res = await fetch(WEATHER_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { current } = await res.json();
+    applyWeather(weatherFromCode(current.weather_code), Math.round(current.temperature_2m));
+  } catch (e) {
+    console.warn('날씨를 불러오지 못했습니다.', e);
+    if (!yardEl.dataset.weather) applyWeather('clear', null);
+  }
+}
+
+// 눈 오는 날엔 눈사람 옆에서 토닥토닥
+async function buildSnowman() {
+  petBusy = true;
+  await petWalk(44, 70);
+  petBody.classList.add('face-left');
+  petSay('눈사람 만들자! ⛄', 2400);
+  await petPlayOnce('dance', 1600);
+  const snowman = $('snowman');
+  snowman.classList.add('grow');
+  setTimeout(() => snowman.classList.remove('grow'), 600);
+  petBusy = false;
+  petSchedule(petRest());
+}
 
 /* ---------- 서버 동기화 ---------- */
 
@@ -1191,6 +1446,10 @@ if (!getNickname()) openNickDialog();
 setPetX(Math.random() * petMaxX());
 petNextAction();
 setInterval(updatePet, 10000);
+setTimeout(goSleep, SLEEP_EVERY_MS);
+scheduleVisit();
+loadWeather();
+setInterval(loadWeather, WEATHER_REFRESH_MS);
 setSync('loading');
 pull().then(() => {
   heartbeat();
