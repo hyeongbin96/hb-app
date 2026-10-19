@@ -120,6 +120,34 @@
     </form>
   </dialog>
 
+  <div id="pet-yard" class="pet-yard">
+    <div class="pet-house" aria-hidden="true">
+      <svg viewBox="0 0 100 96" xmlns="http://www.w3.org/2000/svg">
+        <rect x="66" y="10" width="11" height="22" rx="3" fill="#e8a0b4" stroke="#6b5b6e" stroke-width="2.5"/>
+        <rect x="16" y="42" width="68" height="46" rx="10" fill="#fff4e0" stroke="#6b5b6e" stroke-width="2.5"/>
+        <path d="M8 48 L50 12 L92 48 Q94 52 89 53 L11 53 Q6 52 8 48 Z" fill="#ff9db8" stroke="#6b5b6e" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="50" cy="34" r="6" fill="#fff" stroke="#6b5b6e" stroke-width="2"/>
+        <path d="M50 37 l-3 -3 a2 2 0 0 1 3 -2.5 a2 2 0 0 1 3 2.5 z" fill="#ff7c9c"/>
+        <path d="M40 88 V70 a10 10 0 0 1 20 0 V88" fill="#c99a78" stroke="#6b5b6e" stroke-width="2.5"/>
+        <circle cx="55" cy="78" r="1.6" fill="#6b5b6e"/>
+        <rect x="22" y="60" width="12" height="12" rx="3" fill="#d6ecff" stroke="#6b5b6e" stroke-width="2"/>
+        <rect x="66" y="60" width="12" height="12" rx="3" fill="#d6ecff" stroke="#6b5b6e" stroke-width="2"/>
+        <circle cx="10" cy="86" r="4" fill="#ffd6e0" stroke="#6b5b6e" stroke-width="1.5"/>
+        <circle cx="10" cy="86" r="1.5" fill="#ffe17a"/>
+        <circle cx="92" cy="85" r="4" fill="#fff2b8" stroke="#6b5b6e" stroke-width="1.5"/>
+        <circle cx="92" cy="85" r="1.5" fill="#ff9db8"/>
+      </svg>
+      <span class="pet-sign">치이카와네 <span id="pet-meals"></span></span>
+    </div>
+    <div id="pet" class="pet">
+      <button id="pet-bubble" class="pet-bubble" type="button" title="밥 주기" hidden></button>
+      <div id="pet-body" class="pet-body" title="쓰다듬기">
+        <img src="img/chiikawa-pet.png" alt="치이카와">
+      </div>
+      <span class="pet-shadow"></span>
+    </div>
+  </div>
+
   <aside id="presence" class="presence" hidden>
     <div class="presence-head">
       <button type="button" id="presence-toggle" class="presence-title">👑 접속자 <span id="presence-count"></span></button>

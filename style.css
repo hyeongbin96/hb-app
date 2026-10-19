@@ -161,8 +161,213 @@ body {
 .presence.collapsed .presence-list { display: none; }
 .badge.viewing { background: var(--blue); }
 
+/* ---------- 펫: 치이카와 마당 ---------- */
+
+.pet-yard {
+  position: fixed;
+  right: 16px;
+  bottom: 10px;
+  z-index: 30;
+  width: 320px;
+  height: 140px;
+  pointer-events: none;
+}
+.pet-yard::before { /* 잔디 */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  background: #d8f0c8;
+  border: 3px solid #a9d98f;
+  border-radius: 999px;
+  box-shadow: 0 3px 0 #a9d98f;
+}
+
+.pet-house { position: absolute; right: 4px; bottom: 8px; width: 92px; }
+.pet-house svg { display: block; width: 100%; }
+.pet-sign {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  transform: translateX(-50%);
+  padding: 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+}
+
+.pet {
+  position: absolute;
+  left: 0;
+  bottom: 10px;
+  width: 80px;
+  transition-property: transform;
+  transition-timing-function: linear;
+}
+.pet-body {
+  position: relative;
+  z-index: 1;
+  width: 80px;
+  height: 80px;
+  cursor: pointer;
+  pointer-events: auto;
+  transform-origin: 50% 100%;
+}
+/* 원본 그림에 여백이 많아서 살짝 키워 보여준다 */
+.pet-body img { width: 100%; height: 100%; object-fit: contain; transform: scale(1.35); transform-origin: 50% 80%; pointer-events: none; user-select: none; }
+.pet-body.face-left img { transform: scale(-1.35, 1.35); }
+.pet-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  width: 42px;
+  height: 8px;
+  background: rgba(107, 91, 110, .18);
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+/* 동작들 */
+.pet-body.walking { animation: pet-walk .32s ease-in-out infinite alternate; }
+.pet-body.hungry.walking { animation-duration: .6s; }
+.pet-body.look { animation: pet-look 2.2s ease-in-out; }
+.pet-body.hop { animation: pet-hop .9s ease-out; }
+.pet-body.sigh { animation: pet-sigh 2s ease-in-out; }
+.pet-body.hungry img { filter: saturate(.75); }
+.pet-body.eating { animation: pet-munch .3s ease-in-out infinite alternate; }
+.pet-body.full { animation: pet-full 3.6s ease-in-out; }
+
+@keyframes pet-walk { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-4px) rotate(4deg); } }
+@keyframes pet-look {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-10deg); }
+  60% { transform: rotate(10deg); }
+}
+@keyframes pet-hop {
+  0% { transform: scale(1.1, .85); }
+  35% { transform: translateY(-26px) scale(.92, 1.1); }
+  70% { transform: translateY(0) scale(1.12, .86); }
+  100% { transform: scale(1); }
+}
+@keyframes pet-sigh {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04, .9) translateY(2px); }
+}
+@keyframes pet-munch { from { transform: scale(1.06, .92); } to { transform: scale(.96, 1.06); } }
+@keyframes pet-full {
+  0% { transform: scale(1); }
+  8% { transform: scale(1.25, .78); }          /* 꾹 눌렸다가 */
+  18% { transform: translateY(-34px) scale(.9, 1.12) rotate(0); }
+  30% { transform: translateY(-34px) rotate(360deg); }   /* 공중 한 바퀴 */
+  40% { transform: translateY(0) scale(1.2, .82) rotate(360deg); }
+  48% { transform: scale(1.08) rotate(360deg); }         /* 배 빵빵 */
+  56% { transform: scale(1.14, 1.04) rotate(352deg); }
+  64% { transform: scale(1.14, 1.04) rotate(368deg); }
+  72% { transform: scale(1.14, 1.04) rotate(352deg); }
+  80% { transform: scale(1.1) translateY(-10px) rotate(360deg); }
+  90% { transform: scale(1.05, .95) rotate(360deg); }
+  100% { transform: scale(1) rotate(360deg); }
+}
+
+/* 말구름 */
+.pet-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  pointer-events: auto;
+  box-shadow: 0 3px 0 var(--line);
+}
+.pet-bubble::after { /* 말꼬리 동글동글 */
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 8px;
+  height: 8px;
+  margin: 3px 0 0 -4px;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+}
+.pet-bubble:hover { transform: translateX(-50%) translateY(-2px); }
+.pet-bubble.hungry {
+  border-color: var(--pink-deep);
+  box-shadow: 0 3px 0 var(--pink-deep);
+  cursor: pointer;
+  animation: bubble-beg 1.2s ease-in-out infinite;
+}
+.pet-bubble.hungry::after { border-color: var(--pink-deep); }
+.pet-bubble.hungry::before {
+  content: "눌러서 밥 주기";
+  position: absolute;
+  left: 50%;
+  top: -18px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+.pet-bubble.full { border-color: var(--pink-deep); background: #fff0f4; cursor: default; animation: pop .25s ease-out; }
+.pet-bubble.eating { cursor: default; }
+.pet-bubble:disabled { opacity: 1; color: var(--ink); }
+.pet-bubble:disabled:hover { transform: translateX(-50%); box-shadow: 0 3px 0 var(--line); }
+@keyframes bubble-beg {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0); }
+  25% { transform: translateX(-50%) translateY(-3px) rotate(-3deg); }
+  75% { transform: translateX(-50%) translateY(-3px) rotate(3deg); }
+}
+
+/* 주먹밥과 하트 */
+.pet-food {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 2;
+  font-size: 24px;
+  animation: food-drop 1.8s ease-in forwards;
+}
+@keyframes food-drop {
+  0% { transform: translate(-50%, -60px) rotate(-20deg); opacity: 0; }
+  20% { transform: translate(-50%, 6px) rotate(0); opacity: 1; }
+  40%, 60% { transform: translate(-50%, 14px) scale(.9); }
+  80% { transform: translate(-50%, 18px) scale(.5); opacity: 1; }
+  100% { transform: translate(-50%, 20px) scale(0); opacity: 0; }
+}
+.pet-heart {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  z-index: 2;
+  font-size: 16px;
+  pointer-events: none;
+  animation: heart-float 1.6s ease-out forwards;
+  opacity: 0;
+}
+@keyframes heart-float {
+  0% { transform: translate(-50%, 0) scale(.4); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--x)), var(--y)) scale(1.1); opacity: 0; }
+}
+
+@media (max-width: 640px) {
+  .pet-yard { width: 230px; height: 120px; right: 8px; }
+  .pet-house { width: 72px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mascots img, .cheer, .cheer .bubble { animation: none !important; }
+  .pet-body, .pet-bubble { animation: none !important; }
   .cheer { transform: translateX(-50%); }
 }
 

@@ -25,6 +25,16 @@ function defaultState() {
       { id: uid(), title: '진행 중', wip: 0, cards: [] },
       { id: uid(), title: '완료', wip: 0, cards: [] },
     ],
+    pet: normalizePet(),
+  };
+}
+
+// 모두가 함께 키우는 치이카와. fedAt: 마지막으로 밥 먹은 시각
+function normalizePet(pet = {}) {
+  return {
+    fedAt: Number(pet.fedAt) || Date.now(),
+    fedBy: String(pet.fedBy || '').slice(0, 20),
+    meals: Number(pet.meals) > 0 ? Math.floor(Number(pet.meals)) : 0,
   };
 }
 
@@ -60,6 +70,7 @@ function normalize(data) {
       wip: Number(col.wip) > 0 ? Math.floor(Number(col.wip)) : 0,
       cards: (Array.isArray(col.cards) ? col.cards : []).map(normalizeCard),
     })),
+    pet: normalizePet(data.pet),
   };
 }
 
@@ -169,6 +180,7 @@ function render() {
   $('clear-filters').hidden = !isFiltering();
   renderSummary();
   renderMood();
+  updatePet();
 }
 
 // 완료 컬럼의 카드는 기한이 지나도 "지남"으로 세지 않는다
@@ -844,6 +856,174 @@ function initAdmin() {
   if (adminKey()) startAdmin();
 }
 
+/* ---------- 펫: 치이카와 키우기 ---------- */
+
+const HUNGRY_AFTER_MS = 60 * 60 * 1000; // 밥 먹고 1시간 지나면 배고파진다
+const PET_SIZE = 80;
+const HOUSE_SPACE = 96; // 오른쪽 집 자리
+
+const petEl = $('pet');
+const petBody = $('pet-body');
+const petBubble = $('pet-bubble');
+const yardEl = $('pet-yard');
+
+let petX = 20;
+let petTimer;
+let petBusy = false;      // 밥 먹는 중에는 돌아다니지 않는다
+let petFeedPending = false;
+let seenFedAt = state.pet.fedAt;
+
+const isHungry = () => Date.now() - state.pet.fedAt > HUNGRY_AFTER_MS;
+const petMaxX = () => Math.max(0, yardEl.clientWidth - HOUSE_SPACE - PET_SIZE);
+
+function petSchedule(ms, fn = petNextAction) {
+  clearTimeout(petTimer);
+  petTimer = setTimeout(fn, ms);
+}
+
+function setPetX(x, seconds = 0) {
+  petEl.style.transitionDuration = `${seconds}s`;
+  petEl.style.transform = `translateX(${x}px)`;
+  petX = x;
+}
+
+// 걷는 도중에 멈출 때 지금 위치에서 바로 서도록
+function freezePet() {
+  const { m41 } = new DOMMatrix(getComputedStyle(petEl).transform);
+  setPetX(m41);
+  petBody.classList.remove('walking');
+}
+
+function petWalkTo(x, speed) {
+  const seconds = Math.abs(x - petX) / speed;
+  petBody.classList.toggle('face-left', x < petX);
+  petBody.classList.add('walking');
+  setPetX(x, seconds);
+  petSchedule(seconds * 1000, () => {
+    petBody.classList.remove('walking');
+    petSchedule(600 + Math.random() * 1800);
+  });
+}
+
+function petPlay(className, ms) {
+  petBody.classList.add(className);
+  petSchedule(ms, () => {
+    petBody.classList.remove(className);
+    petNextAction();
+  });
+}
+
+// 혼자 돌아다니기: 걷기 / 두리번 / 깡총
+function petNextAction() {
+  if (petBusy) return;
+  if (reduceMotion.matches) return;
+  const hungry = isHungry();
+  const r = Math.random();
+  if (r < 0.55) petWalkTo(Math.random() * petMaxX(), hungry ? 25 : 55);
+  else if (r < 0.8) petPlay('look', 2200);
+  else if (hungry) petPlay('sigh', 2000);
+  else petPlay('hop', 900);
+}
+
+function showPetBubble(text, kind) {
+  petBubble.textContent = text;
+  petBubble.className = `pet-bubble ${kind}`;
+  petBubble.hidden = false;
+  petBubble.disabled = kind !== 'hungry';
+}
+
+function hidePetBubble() {
+  petBubble.hidden = true;
+}
+
+function spawnPetBits(symbols, count, className) {
+  for (let i = 0; i < count; i++) {
+    const bit = el('span', className, pick(symbols));
+    bit.style.setProperty('--x', `${(Math.random() - 0.5) * 90}px`);
+    bit.style.setProperty('--y', `${-50 - Math.random() * 60}px`);
+    bit.style.animationDelay = `${Math.random() * 0.8}s`;
+    petEl.append(bit);
+    setTimeout(() => bit.remove(), 2600);
+  }
+}
+
+// 냠냠 → 배불러 애니메이션
+function playFed(line) {
+  petBusy = true;
+  clearTimeout(petTimer);
+  freezePet();
+  petBody.classList.remove('hungry', 'look', 'hop', 'sigh');
+  petBody.classList.remove('face-left');
+  hidePetBubble();
+
+  const food = el('span', 'pet-food', '🍙');
+  petEl.append(food);
+  petBody.classList.add('eating');
+  showPetBubble('냠냠…', 'eating');
+
+  setTimeout(() => {
+    food.remove();
+    petBody.classList.remove('eating');
+    petBody.classList.add('full');
+    showPetBubble(line, 'full');
+    spawnPetBits(['💕', '💖', '✨', '🌸'], 12, 'pet-heart');
+  }, 1800);
+
+  setTimeout(() => {
+    petBody.classList.remove('full');
+    hidePetBubble();
+    petBusy = false;
+    updatePet();
+    petNextAction();
+  }, 1800 + 3600);
+}
+
+function feedPet() {
+  if (!isHungry() || petBusy) return;
+  update(() => {
+    state.pet = { fedAt: Date.now(), fedBy: getNickname() || '누군가', meals: state.pet.meals + 1 };
+  });
+  petFeedPending = true;
+  seenFedAt = state.pet.fedAt;
+  playFed('배불러~ 💕');
+}
+
+// 화면을 다시 그릴 때마다 배고픔 상태를 반영한다
+function updatePet() {
+  if (!petEl) return;
+  const { fedAt, fedBy } = state.pet;
+  if (fedAt > seenFedAt) {
+    seenFedAt = fedAt;
+    // 방금 다른 사람이 밥을 줬으면 같이 기뻐한다
+    if (!petBusy && Date.now() - fedAt < 30000) {
+      playFed(`${fedBy || '누군가'}가 밥 줬어! 💕`);
+      return;
+    }
+  }
+  if (petBusy) return;
+  const hungry = isHungry();
+  petBody.classList.toggle('hungry', hungry);
+  if (hungry) showPetBubble('🍙 배고파…', 'hungry');
+  else hidePetBubble();
+  $('pet-meals').textContent = state.pet.meals ? `🍙 ${state.pet.meals}` : '';
+}
+
+petBubble.addEventListener('click', feedPet);
+
+// 쓰다듬으면 하트 하나 뿅
+petBody.addEventListener('click', () => {
+  if (petBusy) return;
+  spawnPetBits(['💗'], 1, 'pet-heart');
+  if (!isHungry()) {
+    freezePet();
+    petPlay('hop', 900);
+  }
+});
+
+window.addEventListener('resize', () => {
+  if (petX > petMaxX()) setPetX(petMaxX());
+});
+
 /* ---------- 서버 동기화 ---------- */
 
 const KEY_STORAGE = 'kanban-key';
@@ -888,7 +1068,11 @@ async function api(method, body, path = '/api/board') {
 // 서버 상태로 바꾸되, 아직 저장이 확인되지 않은 내 댓글은 다시 붙인다
 function applyRemote(remote) {
   const next = normalize(remote.data) || defaultState();
-  const merged = mergePendingComments(next);
+  const commentsMerged = mergePendingComments(next);
+  // 내가 준 밥이 아직 저장되지 않았다면 그 기록을 유지한다
+  const feedMerged = petFeedPending && state.pet.fedAt > next.pet.fedAt;
+  if (feedMerged) next.pet = state.pet;
+  const merged = commentsMerged || feedMerged;
   state = next;
   version = remote.version;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -937,13 +1121,14 @@ async function flush() {
   inflight = true;
   dirty = false;
   const sentComments = [...pendingComments];
+  const sentFeed = petFeedPending;
   try {
     const res = await api('PUT', JSON.stringify({ data: state, version }));
     if (res.status === 409) {
       dirty = false;
       if (applyRemote(await res.json())) {
         scheduleSync();
-        showToast('최신 내용으로 바꾸고, 내 댓글은 다시 저장할게요');
+        showToast('최신 내용으로 바꾸고, 내 댓글·밥 준 기록은 다시 저장할게요');
       } else {
         showToast('다른 사람이 먼저 수정해서 최신 내용으로 바꿨어요');
       }
@@ -952,6 +1137,7 @@ async function flush() {
     } else {
       version = (await res.json()).version;
       sentComments.forEach((id) => pendingComments.delete(id));
+      if (sentFeed) petFeedPending = false;
     }
     setSync(dirty ? 'saving' : 'saved');
   } catch (e) {
@@ -989,6 +1175,9 @@ async function pull() {
 render();
 renderNickname();
 if (!getNickname()) openNickDialog();
+setPetX(Math.random() * petMaxX());
+petNextAction();
+setInterval(updatePet, 30000);
 setSync('loading');
 pull().then(() => {
   heartbeat();
