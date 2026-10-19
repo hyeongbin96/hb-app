@@ -40,6 +40,14 @@ function normalizeCard(card = {}) {
     checklist: Array.isArray(card.checklist)
       ? card.checklist.map((i) => ({ id: i.id || uid(), text: String(i.text || ''), done: !!i.done }))
       : [],
+    comments: Array.isArray(card.comments)
+      ? card.comments.map((m) => ({
+        id: m.id || uid(),
+        author: String(m.author || '익명').slice(0, 20),
+        text: String(m.text || '').slice(0, 500),
+        at: Number(m.at) || Date.now(),
+      }))
+      : [],
   };
 }
 
@@ -97,6 +105,16 @@ let dragged = null; // { columnId, cardId }
 
 function findColumn(id) {
   return state.columns.find((c) => c.id === id);
+}
+
+// 다른 사람이 카드를 옮겼을 수 있으니 항상 id로 전체 컬럼에서 찾는다
+function findCardById(id) {
+  if (!id) return null;
+  for (const col of state.columns) {
+    const index = col.cards.findIndex((c) => c.id === id);
+    if (index >= 0) return { col, card: col.cards[index], index };
+  }
+  return null;
 }
 
 function el(tag, className, text) {
@@ -258,6 +276,9 @@ function renderCard(col, card) {
     badge.classList.toggle('complete', done === card.checklist.length);
     meta.append(badge);
   }
+  if (card.comments.length) {
+    meta.append(el('span', 'badge comment', `💬 ${card.comments.length}`));
+  }
   if (meta.childElementCount) cardEl.append(meta);
 
   cardEl.addEventListener('dragstart', (e) => {
@@ -334,8 +355,11 @@ function openDialog(columnId, cardId) {
   checkInput.value = '';
   deleteBtn.hidden = !card;
 
+  $('comment-input').value = '';
+
   renderLabelPicker();
   renderChecklist();
+  renderComments();
   dialog.showModal();
   titleInput.focus();
 }
@@ -393,7 +417,7 @@ function addChecklistItem() {
 
 $('check-add').addEventListener('click', addChecklistItem);
 checkInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.isComposing) {
     e.preventDefault();
     addChecklistItem();
   }
@@ -410,10 +434,10 @@ $('card-form').addEventListener('submit', () => {
     due: dueInput.value,
   });
   update(() => {
-    const col = findColumn(columnId);
-    const i = cardId ? col.cards.findIndex((c) => c.id === cardId) : -1;
-    if (i >= 0) col.cards[i] = draft;
-    else col.cards.push(draft);
+    const found = findCardById(cardId);
+    // 댓글은 다이얼로그를 연 동안에도 바로 저장되므로 최신 댓글을 유지한다
+    if (found) found.col.cards[found.index] = { ...draft, comments: found.card.comments };
+    else (findColumn(columnId) || state.columns[0])?.cards.push(draft);
   });
 });
 
@@ -421,10 +445,12 @@ $('card-cancel').addEventListener('click', () => dialog.close());
 
 deleteBtn.addEventListener('click', () => {
   if (!editing || !editing.cardId) return;
-  const { columnId, cardId } = editing;
-  const col = findColumn(columnId);
-  const index = col.cards.findIndex((c) => c.id === cardId);
-  const [removed] = col.cards.splice(index, 1);
+  const found = findCardById(editing.cardId);
+  if (!found) return dialog.close();
+  const { index } = found;
+  const columnId = found.col.id;
+  const [removed] = found.col.cards.splice(index, 1);
+  pendingComments.forEach((id) => { if (removed.comments.some((m) => m.id === id)) pendingComments.delete(id); });
   save();
   render();
   dialog.close();
@@ -434,6 +460,127 @@ deleteBtn.addEventListener('click', () => {
       if (target) target.cards.splice(Math.min(index, target.cards.length), 0, removed);
     });
   });
+});
+
+/* ---------- 닉네임 ---------- */
+
+const NICK_STORAGE = 'kanban-nickname';
+const nickDialog = $('nick-dialog');
+const nickInput = $('nick-input');
+
+const getNickname = () => localStorage.getItem(NICK_STORAGE) || '';
+
+function renderNickname() {
+  const nick = getNickname();
+  $('nickname').textContent = nick ? `🐾 ${nick}` : '🐾 닉네임 정하기';
+}
+
+function openNickDialog() {
+  nickInput.value = getNickname();
+  nickDialog.showModal();
+  nickInput.focus();
+  nickInput.select();
+}
+
+// 처음 정할 때는 Esc로 닫지 못하게 한다
+nickDialog.addEventListener('cancel', (e) => { if (!getNickname()) e.preventDefault(); });
+
+$('nick-form').addEventListener('submit', (e) => {
+  const nick = nickInput.value.trim().slice(0, 20);
+  if (!nick) {
+    e.preventDefault();
+    return;
+  }
+  localStorage.setItem(NICK_STORAGE, nick);
+  renderNickname();
+  if (dialog.open) renderComments();
+});
+
+$('nickname').addEventListener('click', openNickDialog);
+
+/* ---------- 댓글 ---------- */
+
+const pendingComments = new Set(); // 서버 저장이 아직 확인되지 않은 내 댓글 id
+const commentInput = $('comment-input');
+
+function timeAgo(at) {
+  const sec = (Date.now() - at) / 1000;
+  if (sec < 60) return '방금';
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
+  const d = new Date(at);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function avatarColor(name) {
+  let hue = 0;
+  for (const ch of name) hue = (hue * 31 + ch.codePointAt(0)) % 360;
+  return `hsl(${hue} 85% 86%)`;
+}
+
+function renderComments() {
+  const found = editing ? findCardById(editing.cardId) : null;
+  const comments = found ? found.card.comments : [];
+  const me = getNickname();
+
+  $('comment-hint').hidden = Boolean(found);
+  $('comment-form').hidden = !found;
+  $('comment-count').textContent = comments.length ? `${comments.length}개` : '';
+
+  $('comments').replaceChildren(...comments.map((m) => {
+    const li = el('li', m.author === me ? 'comment mine' : 'comment');
+    const avatar = el('span', 'avatar', [...m.author][0] || '?');
+    avatar.style.background = avatarColor(m.author);
+
+    const head = el('div', 'comment-head');
+    const time = el('time', '', timeAgo(m.at));
+    time.title = new Date(m.at).toLocaleString('ko-KR');
+    head.append(el('strong', '', m.author), time);
+    if (m.author === me) {
+      const del = el('button', 'icon-btn', '✕');
+      del.type = 'button';
+      del.title = '댓글 삭제';
+      del.addEventListener('click', () => deleteComment(m.id));
+      head.append(del);
+    }
+
+    const body = el('div', 'comment-body');
+    body.append(head, el('p', '', m.text));
+    li.append(avatar, body);
+    return li;
+  }));
+}
+
+function addComment() {
+  const text = commentInput.value.trim();
+  const found = editing && findCardById(editing.cardId);
+  if (!text || !found) return;
+  if (!getNickname()) return openNickDialog();
+
+  const comment = { id: uid(), author: getNickname(), text, at: Date.now() };
+  pendingComments.add(comment.id);
+  update(() => { found.card.comments.push(comment); });
+  commentInput.value = '';
+  renderComments();
+  const list = $('comments');
+  list.scrollTop = list.scrollHeight;
+}
+
+function deleteComment(id) {
+  const found = editing && findCardById(editing.cardId);
+  if (!found) return;
+  pendingComments.delete(id);
+  update(() => { found.card.comments = found.card.comments.filter((m) => m.id !== id); });
+  renderComments();
+}
+
+$('comment-add').addEventListener('click', addComment);
+commentInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    addComment();
+  }
 });
 
 /* ---------- 토스트 ---------- */
@@ -553,11 +700,35 @@ async function api(method, body) {
   throw new Error('unauthorized');
 }
 
+// 서버 상태로 바꾸되, 아직 저장이 확인되지 않은 내 댓글은 다시 붙인다
 function applyRemote(remote) {
-  state = normalize(remote.data) || defaultState();
+  const next = normalize(remote.data) || defaultState();
+  const merged = mergePendingComments(next);
+  state = next;
   version = remote.version;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   render();
+  if (dialog.open) renderComments();
+  return merged;
+}
+
+function mergePendingComments(next) {
+  const nextCards = new Map(next.columns.flatMap((c) => c.cards).map((c) => [c.id, c]));
+  let merged = false;
+  for (const card of state.columns.flatMap((c) => c.cards)) {
+    for (const comment of card.comments) {
+      if (!pendingComments.has(comment.id)) continue;
+      const target = nextCards.get(card.id);
+      if (!target) {
+        pendingComments.delete(comment.id); // 다른 사람이 카드를 지웠다
+      } else if (!target.comments.some((m) => m.id === comment.id)) {
+        target.comments.push(comment);
+        target.comments.sort((a, b) => a.at - b.at);
+        merged = true;
+      }
+    }
+  }
+  return merged;
 }
 
 // 드래그 중이거나 컬럼 이름을 고치는 중에는 화면을 갈아엎지 않는다
@@ -580,16 +751,22 @@ async function flush() {
   if (!dirty) return;
   inflight = true;
   dirty = false;
+  const sentComments = [...pendingComments];
   try {
     const res = await api('PUT', JSON.stringify({ data: state, version }));
     if (res.status === 409) {
       dirty = false;
-      applyRemote(await res.json());
-      showToast('다른 사람이 먼저 수정해서 최신 내용으로 바꿨어요');
+      if (applyRemote(await res.json())) {
+        scheduleSync();
+        showToast('최신 내용으로 바꾸고, 내 댓글은 다시 저장할게요');
+      } else {
+        showToast('다른 사람이 먼저 수정해서 최신 내용으로 바꿨어요');
+      }
     } else if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     } else {
       version = (await res.json()).version;
+      sentComments.forEach((id) => pendingComments.delete(id));
     }
     setSync(dirty ? 'saving' : 'saved');
   } catch (e) {
@@ -616,7 +793,7 @@ async function pull() {
       scheduleSync();
       return;
     }
-    if (remote.version !== version && !isBusy()) applyRemote(remote);
+    if (remote.version !== version && !isBusy() && applyRemote(remote)) scheduleSync();
     setSync('saved');
   } catch (e) {
     console.warn('불러오기 실패', e);
@@ -625,6 +802,8 @@ async function pull() {
 }
 
 render();
+renderNickname();
+if (!getNickname()) openNickDialog();
 setSync('loading');
 pull();
 setInterval(pull, POLL_MS);

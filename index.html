@@ -17,6 +17,7 @@
       <img src="img/usagi.png" alt="">
     </div>
     <div class="top-actions">
+      <button id="nickname" type="button" class="nick" title="닉네임 바꾸기"></button>
       <button id="export" type="button" title="JSON 파일로 내보내기">⬇ 내보내기</button>
       <label class="btn" title="JSON 파일 가져오기">⬆ 가져오기
         <input id="import" type="file" accept="application/json,.json" hidden>
@@ -82,11 +83,38 @@
         </div>
       </div>
 
+      <div class="field">
+        <div class="check-head">
+          <span>댓글</span>
+          <span id="comment-count" class="check-count"></span>
+        </div>
+        <ul id="comments" class="comments"></ul>
+        <p id="comment-hint" class="hint">카드를 저장한 뒤 댓글을 달 수 있어요</p>
+        <div id="comment-form" class="comment-add">
+          <textarea id="comment-input" rows="2" maxlength="500" placeholder="댓글 입력 (Enter 등록 · Shift+Enter 줄바꿈)"></textarea>
+          <button type="button" id="comment-add" class="primary">등록</button>
+        </div>
+      </div>
+
       <div class="dialog-actions">
         <button type="button" id="card-delete" class="danger">삭제</button>
         <span class="spacer"></span>
         <button type="button" id="card-cancel">취소</button>
         <button type="submit" class="primary">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="nick-dialog" class="nick-dialog">
+    <form method="dialog" id="nick-form">
+      <h2>닉네임을 정해 주세요</h2>
+      <p class="hint">댓글에 이 이름이 표시돼요. 언제든 바꿀 수 있어요.</p>
+      <label class="field">
+        <input id="nick-input" type="text" required maxlength="20" placeholder="예: 치이카와">
+      </label>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="submit" class="primary">확인</button>
       </div>
     </form>
   </dialog>

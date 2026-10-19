@@ -14,6 +14,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -286,6 +287,7 @@ dialog {
   padding: 22px 24px;
   width: min(480px, 94vw);
   max-height: 90vh;
+  overflow-y: auto;
   background: var(--bg);
   color: var(--ink);
   box-shadow: 0 6px 0 var(--pink-deep);
@@ -337,6 +339,55 @@ dialog h2 { margin: 0 0 14px; font-size: 20px; font-weight: 400; }
 .checklist input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--pink-deep); cursor: pointer; }
 .check-add { display: flex; gap: 8px; }
 .check-add input { flex: 1; min-width: 0; }
+
+.hint { margin: 4px 0 8px; font-size: 13px; color: var(--ink-soft); }
+
+.comments { list-style: none; margin: 8px 0; padding: 0; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.comment { display: flex; gap: 8px; align-items: flex-start; }
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  font-size: 14px;
+  box-shadow: 0 2px 0 rgba(107, 91, 110, .15);
+}
+.comment-body {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 12px 8px;
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 4px 16px 16px 16px;
+}
+.comment.mine .comment-body { background: #fff4f7; }
+.comment-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.comment-head strong { font-weight: 400; }
+.comment-head time { color: var(--ink-soft); font-size: 12px; }
+.comment-head .icon-btn { margin-left: auto; font-size: 12px; }
+.comment-body p { margin: 2px 0 0; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+.comment-add { display: flex; gap: 8px; align-items: flex-end; }
+.comment-add textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+.comment-add textarea:focus { outline: none; border-color: var(--pink-deep); }
+
+.nick { background: #fff; border-color: var(--pink-deep); }
+.nick-dialog { width: min(360px, 92vw); }
+.nick-dialog input { display: block; width: 100%; padding: 10px 14px; font: inherit; font-size: 16px; color: var(--ink); border: 2px solid var(--line); border-radius: 16px; }
+.nick-dialog input:focus { outline: none; border-color: var(--pink-deep); }
 
 .dialog-actions { display: flex; gap: 8px; margin-top: 6px; }
 .spacer { flex: 1; }
