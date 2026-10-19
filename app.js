@@ -858,7 +858,7 @@ function initAdmin() {
 
 /* ---------- 펫: 치이카와 키우기 ---------- */
 
-const HUNGRY_AFTER_MS = 60 * 60 * 1000; // 밥 먹고 1시간 지나면 배고파진다
+const HUNGRY_AFTER_MS = 2 * 60 * 1000; // 밥 먹고 2분 지나면 배고파진다
 const PET_SIZE = 80;
 const HOUSE_SPACE = 96; // 오른쪽 집 자리
 
@@ -887,21 +887,28 @@ function setPetX(x, seconds = 0) {
   petX = x;
 }
 
-// 걷는 도중에 멈출 때 지금 위치에서 바로 서도록
+const PET_MOTIONS = ['walking', 'running', 'hopping', 'look', 'hop', 'sigh', 'spin', 'dance', 'stretch'];
+const petRest = () => 120 + Math.random() * 300; // 동작 사이 아주 짧게만 쉰다
+
+// 하던 동작을 멈추고 지금 위치에 바로 선다
 function freezePet() {
+  clearTimeout(petTimer);
   const { m41 } = new DOMMatrix(getComputedStyle(petEl).transform);
   setPetX(m41);
-  petBody.classList.remove('walking');
+  petBody.classList.remove(...PET_MOTIONS);
 }
 
-function petWalkTo(x, speed) {
+// gait: walking(뒤뚱) / running(총총) / hopping(깡총깡총)
+function petMove(x, speed, gait) {
+  // 너무 가까운 곳이면 반대편으로 간다
+  if (Math.abs(x - petX) < 50) x = petMaxX() - x;
   const seconds = Math.abs(x - petX) / speed;
   petBody.classList.toggle('face-left', x < petX);
-  petBody.classList.add('walking');
+  petBody.classList.add(gait);
   setPetX(x, seconds);
   petSchedule(seconds * 1000, () => {
-    petBody.classList.remove('walking');
-    petSchedule(600 + Math.random() * 1800);
+    petBody.classList.remove(gait);
+    petSchedule(petRest());
   });
 }
 
@@ -909,20 +916,28 @@ function petPlay(className, ms) {
   petBody.classList.add(className);
   petSchedule(ms, () => {
     petBody.classList.remove(className);
-    petNextAction();
+    petSchedule(petRest());
   });
 }
 
-// 혼자 돌아다니기: 걷기 / 두리번 / 깡총
+// 혼자 쉬지 않고 돌아다닌다. 배고프면 느릿느릿, 한숨이 늘어난다
 function petNextAction() {
-  if (petBusy) return;
-  if (reduceMotion.matches) return;
-  const hungry = isHungry();
+  if (petBusy || reduceMotion.matches) return;
+  const target = Math.random() * petMaxX();
   const r = Math.random();
-  if (r < 0.55) petWalkTo(Math.random() * petMaxX(), hungry ? 25 : 55);
-  else if (r < 0.8) petPlay('look', 2200);
-  else if (hungry) petPlay('sigh', 2000);
-  else petPlay('hop', 900);
+  if (isHungry()) {
+    if (r < 0.6) petMove(target, 28, 'walking');
+    else if (r < 0.85) petPlay('sigh', 1600);
+    else petPlay('look', 1400);
+    return;
+  }
+  if (r < 0.38) petMove(target, 60, 'walking');
+  else if (r < 0.53) petMove(target, 140, 'running');
+  else if (r < 0.68) petMove(target, 75, 'hopping');
+  else if (r < 0.76) petPlay('spin', 900);
+  else if (r < 0.84) petPlay('dance', 1600);
+  else if (r < 0.92) petPlay('look', 1300);
+  else petPlay('stretch', 1300);
 }
 
 function showPetBubble(text, kind) {
@@ -950,10 +965,8 @@ function spawnPetBits(symbols, count, className) {
 // 냠냠 → 배불러 애니메이션
 function playFed(line) {
   petBusy = true;
-  clearTimeout(petTimer);
   freezePet();
-  petBody.classList.remove('hungry', 'look', 'hop', 'sigh');
-  petBody.classList.remove('face-left');
+  petBody.classList.remove('hungry', 'face-left');
   hidePetBubble();
 
   const food = el('span', 'pet-food', '🍙');
@@ -1177,7 +1190,7 @@ renderNickname();
 if (!getNickname()) openNickDialog();
 setPetX(Math.random() * petMaxX());
 petNextAction();
-setInterval(updatePet, 30000);
+setInterval(updatePet, 10000);
 setSync('loading');
 pull().then(() => {
   heartbeat();

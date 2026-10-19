@@ -231,22 +231,79 @@ body {
   transform: translateX(-50%);
 }
 
+/* 가만히 있을 때도 숨 쉬듯 들썩인다 */
+.pet-breath { width: 100%; height: 100%; transform-origin: 50% 100%; animation: pet-breathe 1.8s ease-in-out infinite; }
+.pet-body.walking .pet-breath, .pet-body.running .pet-breath, .pet-body.hopping .pet-breath { animation: none; }
+@keyframes pet-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.03, .97); } }
+
 /* 동작들 */
-.pet-body.walking { animation: pet-walk .32s ease-in-out infinite alternate; }
-.pet-body.hungry.walking { animation-duration: .6s; }
-.pet-body.look { animation: pet-look 2.2s ease-in-out; }
+.pet-body.walking { animation: pet-walk .36s ease-in-out infinite alternate; }
+.pet-body.hungry.walking { animation-duration: .7s; }
+.pet-body.running { animation: pet-run .2s ease-in-out infinite alternate; }
+.pet-body.hopping { animation: pet-hopstep .5s ease-in-out infinite; }
+.pet-body.look { animation: pet-look 1.3s ease-in-out; }
+.pet-body.hungry.look { animation-duration: 1.4s; }
 .pet-body.hop { animation: pet-hop .9s ease-out; }
-.pet-body.sigh { animation: pet-sigh 2s ease-in-out; }
+.pet-body.sigh { animation: pet-sigh 1.6s ease-in-out; }
+.pet-body.spin { animation: pet-spin .9s ease-in-out; }
+.pet-body.dance { animation: pet-dance .4s ease-in-out 4 alternate; }
+.pet-body.stretch { animation: pet-stretch 1.3s ease-in-out; }
 .pet-body.hungry img { filter: saturate(.75); }
 .pet-body.eating { animation: pet-munch .3s ease-in-out infinite alternate; }
 .pet-body.full { animation: pet-full 3.6s ease-in-out; }
 
-@keyframes pet-walk { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-4px) rotate(4deg); } }
+/* 달리는 방향으로 몸을 기울인다 */
+.pet-body.running { --lean: 7deg; }
+.pet-body.running.face-left { --lean: -7deg; }
+
+/* 뒤뚱뒤뚱: 발 디딜 때 꾹, 들 때 쭉 */
+@keyframes pet-walk {
+  0% { transform: translateY(0) scale(1.05, .95) rotate(-6deg); }
+  50% { transform: translateY(-7px) scale(.97, 1.04) rotate(0); }
+  100% { transform: translateY(0) scale(1.05, .95) rotate(6deg); }
+}
+@keyframes pet-run {
+  from { transform: translateY(0) scale(1.06, .94) rotate(var(--lean)); }
+  to { transform: translateY(-9px) scale(.95, 1.06) rotate(var(--lean)); }
+}
+@keyframes pet-hopstep {
+  0% { transform: translateY(0) scale(1.12, .86); }
+  15% { transform: translateY(0) scale(.94, 1.08); }
+  45% { transform: translateY(-22px) scale(.96, 1.06); }
+  80% { transform: translateY(0) scale(1.1, .88); }
+  100% { transform: translateY(0) scale(1.12, .86); }
+}
 @keyframes pet-look {
   0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(-10deg); }
-  60% { transform: rotate(10deg); }
+  25% { transform: rotate(-12deg) translateX(-2px); }
+  60% { transform: rotate(12deg) translateX(2px); }
 }
+@keyframes pet-spin {
+  0% { transform: scale(1.1, .88); }
+  20% { transform: translateY(-16px) scale(.95, 1.06) rotate(0); }
+  70% { transform: translateY(-16px) rotate(360deg); }
+  85% { transform: translateY(0) scale(1.12, .88) rotate(360deg); }
+  100% { transform: scale(1) rotate(360deg); }
+}
+@keyframes pet-dance {
+  from { transform: rotate(-14deg) translateY(0) scale(1.04, .96); }
+  to { transform: rotate(14deg) translateY(-8px) scale(.97, 1.04); }
+}
+@keyframes pet-stretch {
+  0%, 100% { transform: scale(1); }
+  20% { transform: scale(1.1, .9); }
+  55% { transform: scale(.9, 1.18) translateY(-2px); }
+  75% { transform: scale(.92, 1.15); }
+}
+
+/* 그림자도 발걸음·점프에 맞춰 */
+.pet-body.walking ~ .pet-shadow { animation: shadow-step .36s ease-in-out infinite alternate; }
+.pet-body.running ~ .pet-shadow { animation: shadow-step .2s ease-in-out infinite alternate; }
+.pet-body.hopping ~ .pet-shadow { animation: shadow-hop .5s ease-in-out infinite; }
+.pet-body.hop ~ .pet-shadow { animation: shadow-hop .9s ease-out; }
+.pet-body.spin ~ .pet-shadow { animation: shadow-hop .9s ease-in-out; }
+@keyframes shadow-step { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(.85); } }
+@keyframes shadow-hop { 0%, 100% { transform: translateX(-50%) scale(1); } 45% { transform: translateX(-50%) scale(.6); opacity: .6; } }
 @keyframes pet-hop {
   0% { transform: scale(1.1, .85); }
   35% { transform: translateY(-26px) scale(.92, 1.1); }
@@ -367,7 +424,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .mascots img, .cheer, .cheer .bubble { animation: none !important; }
-  .pet-body, .pet-bubble { animation: none !important; }
+  .pet-body, .pet-bubble, .pet-breath, .pet-shadow { animation: none !important; }
   .cheer { transform: translateX(-50%); }
 }
 
