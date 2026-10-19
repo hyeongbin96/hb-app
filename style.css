@@ -474,19 +474,6 @@ body {
   overflow: hidden;
   pointer-events: none;
 }
-.weather-badge {
-  position: absolute;
-  right: 4px;
-  top: 4px;
-  padding: 1px 9px;
-  font-size: 11px;
-  white-space: nowrap;
-  background: rgba(255, 255, 255, .85);
-  border: 2px solid var(--line);
-  border-radius: 999px;
-}
-.weather-badge:empty { display: none; }
-
 .raindrop {
   position: absolute;
   top: -20px;
